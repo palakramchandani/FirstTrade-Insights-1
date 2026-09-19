@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "FirstTrade Decision Centre"
+description = "A synthetic activation-orchestration control centre for product managers at Indian stock brokers. It evaluates activation state and customer intent to select, explain, simulate, and measure the safest next action without using real customer data or sending real messages."
+version = "1.0.0"
+id = "artifacts/firsttrade-app"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20402
+
+[services.development]
+run = "pnpm --filter @workspace/firsttrade-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/firsttrade-app", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/firsttrade-app/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20402"
+BASE_PATH = "/"

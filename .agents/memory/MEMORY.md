@@ -1,0 +1,1 @@
+- [Static Vite builds](static-vite-build-env.md) — use build-safe PORT and BASE_PATH defaults; runtime workflows still provide their configured values.
