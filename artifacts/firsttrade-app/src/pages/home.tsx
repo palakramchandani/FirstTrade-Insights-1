@@ -12,6 +12,7 @@ import {
   GitBranch,
   Info,
   LayoutDashboard,
+  Menu,
   MessageSquare,
   Search,
   Send,
@@ -49,6 +50,7 @@ import {
 type Area = "Overview" | "Cohorts" | "Decisions" | "Policy Studio" | "Measurement" | "Simulator";
 type Tone = "blue" | "green" | "red" | "slate";
 type SimulatorField = keyof SimulatorState | "scenario";
+type ActionFilter = "All actions" | DecisionAction;
 
 const nav = [
   { label: "Overview", icon: LayoutDashboard },
@@ -162,6 +164,29 @@ function SectionTitle({ kicker, title, copy }: { kicker?: string; title: string;
   );
 }
 
+function AnimatedMetric({ value, reducedMotion }: { value: number; reducedMotion: boolean }) {
+  const [displayValue, setDisplayValue] = useState(reducedMotion ? value : 0);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setDisplayValue(value);
+      return undefined;
+    }
+    let frame = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / 720);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.round(value * eased));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [reducedMotion, value]);
+
+  return <span>{displayValue.toLocaleString()}</span>;
+}
+
 function actionTone(action: DecisionAction): Tone {
   if (action === RECOVERY_ACTION) return "red";
   if (action === "No recommendation") return "slate";
@@ -202,10 +227,14 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState(CUSTOMER_PROFILES[0].id);
   const [search, setSearch] = useState("");
   const [cohortFilter, setCohortFilter] = useState<string | null>(null);
+  const [actionFilter, setActionFilter] = useState<ActionFilter>("All actions");
+  const [decisionFilterOpen, setDecisionFilterOpen] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [studioTarget, setStudioTarget] = useState<{ kind: "customer"; id: string } | { kind: "simulator"; decision: Decision } | null>(null);
   const [copyOverrides, setCopyOverrides] = useState<Record<string, string>>({});
   const [workflowStatuses, setWorkflowStatuses] = useState<Record<string, "Draft" | "Approved">>({});
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const [livePolicy, setLivePolicy] = useState<Policy>(() => clonePolicy(DEFAULT_POLICY));
   const [draftPolicy, setDraftPolicy] = useState<Policy>(() => ({ ...clonePolicy(DEFAULT_POLICY), version: "1.1" }));
@@ -222,25 +251,28 @@ export default function Home() {
 
   const decisions = useMemo(() => decisionsFor(livePolicy), [livePolicy]);
   const decisionsById = useMemo(() => new Map(decisions.map((decision) => [decision.customer.id, decision])), [decisions]);
-  const selectedDecision = decisionsById.get(selectedId) ?? decisions[0];
   const simulatorDecision = useMemo(
     () => createDecision(profileFromSimulator(simulatorState), livePolicy),
     [livePolicy, simulatorState],
   );
-  const studioDecision = studioTarget?.kind === "simulator"
-    ? studioTarget.decision
-    : studioTarget
-      ? decisionsById.get(studioTarget.id) ?? selectedDecision
-      : null;
 
   const filteredDecisions = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return decisions.filter((decision) => {
       const matchesCohort = !cohortFilter || decision.cohort === cohortFilter;
+      const matchesAction = actionFilter === "All actions" || decision.selectedAction === actionFilter;
       const searchable = `${decision.customer.name} ${decision.customer.id} ${decision.cohort} ${decision.selectedAction} ${decision.stateLabel}`.toLowerCase();
-      return matchesCohort && (!normalizedSearch || searchable.includes(normalizedSearch));
+      return matchesCohort && matchesAction && (!normalizedSearch || searchable.includes(normalizedSearch));
     });
-  }, [cohortFilter, decisions, search]);
+  }, [actionFilter, cohortFilter, decisions, search]);
+
+  const selectedDecision = decisionsById.get(selectedId) ?? decisions[0];
+  const visibleSelectedDecision = filteredDecisions.find((decision) => decision.customer.id === selectedId) ?? filteredDecisions[0] ?? null;
+  const studioDecision = studioTarget?.kind === "simulator"
+    ? studioTarget.decision
+    : studioTarget
+      ? decisionsById.get(studioTarget.id) ?? selectedDecision
+      : null;
 
   const draftDecisions = useMemo(() => decisionsFor(draftPolicy), [draftPolicy]);
   const policyValid = draftPolicy.threshold >= 0
@@ -290,8 +322,12 @@ export default function Home() {
   const openCohort = (cohort: string) => {
     const match = decisions.find((decision) => decision.cohort === cohort);
     setCohortFilter(cohort);
+    setSearch("");
+    setActionFilter("All actions");
+    setDecisionFilterOpen(false);
     if (match) setSelectedId(match.customer.id);
     setArea("Decisions");
+    setMobileMenuOpen(false);
   };
 
   const openStudio = (decision: Decision) => {
@@ -362,6 +398,17 @@ export default function Home() {
     setWorkflowStatuses((current) => ({ ...current, [decisionId]: "Approved" }));
   };
 
+  const updateActionFilter = (nextFilter: ActionFilter) => {
+    setActionFilter(nextFilter);
+    if (nextFilter !== "All actions") setCohortFilter(null);
+  };
+
+  const navigate = (nextArea: Area) => {
+    setArea(nextArea);
+    setMobileMenuOpen(false);
+    setNotificationsOpen(false);
+  };
+
   const page = area === "Overview"
     ? <OverviewPage decisions={decisions} onOpenQueue={() => setArea("Decisions")} onSelect={openCustomerDecision} reducedMotion={reducedMotion} />
     : area === "Cohorts"
@@ -370,13 +417,17 @@ export default function Home() {
         ? (
           <DecisionsPage
             decisions={filteredDecisions}
-            selected={selectedDecision}
+            selected={visibleSelectedDecision}
             selectedId={selectedId}
             search={search}
             cohortFilter={cohortFilter}
+            actionFilter={actionFilter}
+            filterOpen={decisionFilterOpen}
             expanded={expandedCustomerId === selectedId}
             onSearch={setSearch}
             onClearFilter={() => setCohortFilter(null)}
+            onActionFilter={updateActionFilter}
+            onToggleFilter={() => setDecisionFilterOpen((current) => !current)}
             onSelect={(id) => openCustomerDecision(id)}
             onToggleExpanded={() => setExpandedCustomerId((current) => current === selectedId ? null : selectedId)}
             onStudio={openStudio}
@@ -420,7 +471,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden selection:bg-primary/20">
-      <aside className="w-64 border-r border-border bg-card flex flex-col shrink-0">
+      <aside className="hidden lg:flex w-64 border-r border-border bg-card flex-col shrink-0">
         <div className="p-4 border-b border-border flex items-center gap-3">
           <div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><Zap size={16} fill="currentColor" /></div>
           <div><div className="font-bold text-sm text-foreground leading-tight">FirstTrade</div><div className="text-xs font-medium text-muted-foreground">Decision centre</div></div>
@@ -436,12 +487,12 @@ export default function Home() {
               type="button"
               key={label}
               data-testid={`nav-${label.replace(/\s+/g, "-")}`}
-              onClick={() => setArea(label)}
+              onClick={() => navigate(label)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${area === label ? "bg-background text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
             >
               <Icon size={16} className={area === label ? "text-primary" : "text-muted-foreground"} />
               {label}
-              {label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.filter((decision) => decision.selectedAction !== "No recommendation").length}</span>}
+              {label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.length}</span>}
             </button>
           ))}
         </nav>
@@ -452,28 +503,43 @@ export default function Home() {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-border bg-card px-6 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 text-sm font-medium">
+        <header className="h-14 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between shrink-0 relative">
+          <div className="flex items-center gap-2 text-sm font-medium min-w-0">
+            <button type="button" data-testid="button-mobile-menu" aria-label="Open navigation menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-1.5 -ml-1 text-muted-foreground hover:text-foreground transition-colors">
+              <Menu size={18} />
+            </button>
             <span className="text-muted-foreground">Activation</span> <span className="text-border">/</span> <span className="text-foreground">{area}</span>
           </div>
-          <div className="flex items-center gap-5">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-background border border-border px-2 py-1 rounded-full">
+          <div className="flex items-center gap-3 sm:gap-5">
+            <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-muted-foreground bg-background border border-border px-2 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-[#18794E]" /> All systems synthetic
             </div>
-            <button type="button" data-testid="button-notifications" aria-label="Notifications" className="text-muted-foreground hover:text-foreground transition-colors"><Bell size={18} /></button>
+            <div className="relative">
+              <button type="button" data-testid="button-notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((current) => !current)} className="text-muted-foreground hover:text-foreground transition-colors"><Bell size={18} /></button>
+              <AnimatePresence>
+                {notificationsOpen && (
+                  <motion.div initial={reducedMotion ? false : { opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -4 }} transition={{ duration: reducedMotion ? 0 : 0.15, ease: "easeOut" }} role="dialog" aria-label="Notifications" data-testid="panel-notifications" className="absolute right-0 top-8 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-card p-4 shadow-xl">
+                    <div className="flex items-center justify-between mb-3"><b className="text-sm text-foreground">Notifications</b><Badge tone="green">Synthetic</Badge></div>
+                    <div className="space-y-3 text-xs">
+                      {["Policy v" + livePolicy.version + " is live across " + decisions.length + " decisions.", "UCC pending cohort has a safe product exploration path.", "A2T suppression is active after completed actions."].map((notification) => <div className="border-t border-border pt-3 first:border-0 first:pt-0 text-muted-foreground" key={notification}>{notification}</div>)}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground">AR</div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 relative">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 relative">
           <div className="max-w-5xl mx-auto space-y-6 pb-12">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={area}
-                initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                initial={reducedMotion ? false : { y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={reducedMotion ? undefined : { opacity: 0, y: -4 }}
-                transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+                exit={reducedMotion ? undefined : { y: -3 }}
+                transition={{ duration: reducedMotion ? 0 : 0.18, ease: "easeOut" }}
               >
                 {page}
               </motion.div>
@@ -481,6 +547,24 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.button type="button" aria-label="Close navigation menu" initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} onClick={() => setMobileMenuOpen(false)} className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" />
+            <motion.aside initial={reducedMotion ? false : { x: -280 }} animate={{ x: 0 }} exit={reducedMotion ? undefined : { x: -280 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[86vw] flex-col border-r border-border bg-card shadow-2xl lg:hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-3"><div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center"><Zap size={16} fill="currentColor" /></div><div><div className="font-bold text-sm text-foreground">FirstTrade</div><div className="text-xs text-muted-foreground">Decision centre</div></div></div>
+                <button type="button" aria-label="Close navigation menu" onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-muted-foreground hover:text-foreground"><X size={18} /></button>
+              </div>
+              <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+                {nav.map(({ label, icon: Icon }) => <button type="button" key={label} data-testid={`mobile-nav-${label.replace(/\s+/g, "-")}`} onClick={() => navigate(label)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${area === label ? "bg-background text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}><Icon size={16} />{label}{label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.length}</span>}</button>)}
+              </nav>
+              <div className="p-4 border-t border-border text-xs font-medium text-muted-foreground space-y-2"><div className="flex items-center gap-2"><CircleAlert size={14} /> Policy v{livePolicy.version}</div><div className="flex items-center gap-2"><UserRound size={14} /> PM workspace</div></div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {studioDecision && (
@@ -517,9 +601,9 @@ function OverviewPage({
       <SectionTitle title="FirstTrade Decision Centre" copy="Turn account activation status and customer behaviour into the most relevant next action." />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          ["Customers requiring a next action", "2,667", "metric-1"],
-          ["A2T achieved through pre-order or MF order", "1,184", "metric-2"],
-          ["Cohort defaults overridden by FirstTrade", "318", "metric-3"],
+          ["Customers requiring a next action", 2667, "metric-1"],
+          ["A2T achieved through pre-order or MF order", 1184, "metric-2"],
+          ["Cohort defaults overridden by FirstTrade", 318, "metric-3"],
         ].map(([label, value, testId]) => (
           <motion.div
             key={label}
@@ -529,7 +613,7 @@ function OverviewPage({
             className="bg-card border border-border p-4 rounded-lg shadow-sm"
           >
             <div className="text-sm text-muted-foreground mb-1">{label}</div>
-            <div className="text-2xl font-bold text-foreground" data-testid={testId}>{value}</div>
+            <div className="text-2xl font-bold text-foreground" data-testid={testId}><AnimatedMetric value={value as number} reducedMotion={reducedMotion} /></div>
           </motion.div>
         ))}
       </div>
@@ -542,9 +626,16 @@ function OverviewPage({
           </div>
           <span className="text-sm text-muted-foreground">Last 7 days · 8,412 accounts</span>
         </div>
-        <div className="p-6 flex items-start justify-between relative overflow-hidden">
+        <div className="p-6 grid grid-cols-2 gap-6 sm:flex sm:items-start sm:justify-between relative overflow-hidden">
+          <motion.div
+            aria-hidden="true"
+            initial={reducedMotion ? { left: "8%" } : { left: "8%", opacity: 0 }}
+            animate={reducedMotion ? { left: "8%", opacity: 0 } : { left: "92%", opacity: [0, 1, 1, 0] }}
+            transition={{ duration: reducedMotion ? 0 : 1.05, delay: reducedMotion ? 0 : 0.15, ease: "easeInOut", times: [0, 0.12, 0.82, 1] }}
+            className="absolute top-[3.55rem] z-20 hidden h-2 w-2 -translate-x-1/2 rounded-full bg-primary shadow-[0_0_0_4px_rgba(23,105,224,0.12)] sm:block"
+          />
           {["Post e-sign", "KRA", "UCC Mapping", "MF Account", "Exchange Approval", "A2T"].map((label, index) => (
-            <div className="flex flex-col flex-1 items-center relative z-10" key={label}>
+            <div className="flex flex-col items-center relative z-10 sm:flex-1" key={label}>
               <div className="text-xl font-bold text-foreground mb-2">{[8412, 7901, 6540, 4862, 3274, 1184][index].toLocaleString()}</div>
               <div className="w-full px-2 mb-3">
                 <div className="h-2 bg-background border border-border rounded-full overflow-hidden">
@@ -559,7 +650,7 @@ function OverviewPage({
               <span className="text-xs font-medium text-muted-foreground text-center">{label}</span>
             </div>
           ))}
-          <div className="absolute top-[3.25rem] left-0 w-full flex justify-between px-[8%] pointer-events-none text-border">
+          <div className="absolute top-[3.25rem] left-0 hidden w-full justify-between px-[8%] pointer-events-none text-border sm:flex">
             {[1, 2, 3, 4, 5].map((index) => <ArrowRight key={index} size={16} />)}
           </div>
         </div>
@@ -568,12 +659,12 @@ function OverviewPage({
       <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
         <div className="p-4 border-b border-border flex justify-between items-center bg-background">
           <div>
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">QUEUE · 2,667 OPEN</div>
+           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">QUEUE · {decisions.length} DECISIONS</div>
             <h2 className="text-lg font-bold text-foreground">Priority Decisions</h2>
           </div>
           <Button onClick={onOpenQueue} testId="button-open-decision-queue">Open decision queue <ArrowRight size={14} /></Button>
         </div>
-        <DecisionTable decisions={priority} onSelect={onSelect} />
+         <DecisionTable decisions={priority} onSelect={onSelect} reducedMotion={reducedMotion} animateRows />
       </div>
     </>
   );
@@ -668,22 +759,30 @@ function DecisionsPage({
   selectedId,
   search,
   cohortFilter,
+  actionFilter,
+  filterOpen,
   expanded,
   onSearch,
   onClearFilter,
+  onActionFilter,
+  onToggleFilter,
   onSelect,
   onToggleExpanded,
   onStudio,
   reducedMotion,
 }: {
   decisions: Decision[];
-  selected: Decision;
+  selected: Decision | null;
   selectedId: string;
   search: string;
   cohortFilter: string | null;
+  actionFilter: ActionFilter;
+  filterOpen: boolean;
   expanded: boolean;
   onSearch: (value: string) => void;
   onClearFilter: () => void;
+  onActionFilter: (value: ActionFilter) => void;
+  onToggleFilter: () => void;
   onSelect: (id: string) => void;
   onToggleExpanded: () => void;
   onStudio: (decision: Decision) => void;
@@ -699,14 +798,22 @@ function DecisionsPage({
           <button type="button" data-testid="button-clear-cohort-filter" onClick={onClearFilter} className="text-primary font-semibold hover:underline">Clear</button>
         </div>
       )}
-      <div className="flex gap-6 flex-1 min-h-0">
-        <div className="w-80 bg-card border border-border rounded-lg shadow-sm flex flex-col shrink-0 overflow-hidden">
-          <div className="p-3 border-b border-border flex items-center gap-2 bg-background">
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+        <div className="w-full lg:w-80 bg-card border border-border rounded-lg shadow-sm flex flex-col shrink-0 overflow-hidden">
+          <div className="p-3 border-b border-border flex items-center gap-2 bg-background relative">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-2.5 top-2 text-muted-foreground" />
               <input data-testid="input-search-customers" aria-label="Search customer or cohort" className="w-full bg-card border border-border rounded text-sm py-1.5 pl-8 pr-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search customer or cohort" />
             </div>
-            <button type="button" data-testid="button-filter-decisions" aria-label="Decision filters" className="p-1.5 text-muted-foreground hover:bg-border/50 rounded transition-colors"><SlidersHorizontal size={16} /></button>
+            <button type="button" data-testid="button-filter-decisions" aria-label="Decision filters" aria-expanded={filterOpen} onClick={onToggleFilter} className={`p-1.5 rounded transition-colors ${filterOpen || actionFilter !== "All actions" ? "text-primary bg-primary/10" : "text-muted-foreground hover:bg-border/50"}`}><SlidersHorizontal size={16} /></button>
+            <AnimatePresence>
+              {filterOpen && (
+                <motion.div initial={reducedMotion ? false : { opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -4 }} transition={{ duration: reducedMotion ? 0 : 0.15, ease: "easeOut" }} className="absolute right-3 top-12 z-30 w-56 rounded-lg border border-border bg-card p-3 shadow-xl">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recommended action<select data-testid="select-decision-action-filter" className="mt-2 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={actionFilter} onChange={(event) => onActionFilter(event.target.value as ActionFilter)}><option>All actions</option>{ACTIONS.map((action) => <option key={action}>{action}</option>)}<option>{RECOVERY_ACTION}</option><option>No recommendation</option><option>Resume account</option></select></label>
+                  <button type="button" data-testid="button-clear-decision-filter" onClick={() => onActionFilter("All actions")} className="mt-3 text-xs font-semibold text-primary hover:underline">Clear action filter</button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           <div className="flex-1 overflow-y-auto">
             {decisions.map((decision) => (
@@ -731,26 +838,32 @@ function DecisionsPage({
             {decisions.length === 0 && <div className="p-4 text-center text-sm text-muted-foreground">No customers found.</div>}
           </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={selected.customer.id}
-              initial={reducedMotion ? false : { opacity: 0, x: 18 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={reducedMotion ? undefined : { opacity: 0, x: -8 }}
-              transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
-              className="h-full"
-            >
-              <Detail decision={selected} expanded={expanded} onToggleExpanded={onToggleExpanded} onStudio={() => onStudio(selected)} reducedMotion={reducedMotion} />
-            </motion.div>
-          </AnimatePresence>
-        </div>
+         <div className="flex-1 min-w-0 min-h-[32rem]">
+           {selected ? (
+             <AnimatePresence mode="wait" initial={false}>
+               <motion.div
+                 key={selected.customer.id}
+                 initial={reducedMotion ? false : { opacity: 0, x: 18 }}
+                 animate={{ opacity: 1, x: 0 }}
+                 exit={reducedMotion ? undefined : { opacity: 0, x: -8 }}
+                 transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+                 className="h-full"
+               >
+                 <Detail decision={selected} expanded={expanded} onToggleExpanded={onToggleExpanded} onStudio={() => onStudio(selected)} reducedMotion={reducedMotion} />
+               </motion.div>
+             </AnimatePresence>
+           ) : (
+             <div className="h-full min-h-[32rem] rounded-lg border border-dashed border-border bg-card flex items-center justify-center p-8 text-center">
+               <div><div className="font-bold text-foreground">No matching decisions</div><p className="mt-1 text-sm text-muted-foreground">Clear the search or action filter to restore the visible decision set.</p></div>
+             </div>
+           )}
+         </div>
       </div>
     </div>
   );
 }
 
-function DecisionTable({ decisions, onSelect }: { decisions: Decision[]; onSelect: (id: string) => void }) {
+function DecisionTable({ decisions, onSelect, reducedMotion, animateRows = false }: { decisions: Decision[]; onSelect: (id: string) => void; reducedMotion: boolean; animateRows?: boolean }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left whitespace-nowrap">
@@ -758,8 +871,14 @@ function DecisionTable({ decisions, onSelect }: { decisions: Decision[]; onSelec
           <tr>{["Customer", "Cohort", "Recommended next action", "Why", "Channel", "Policy", ""].map((heading) => <th className="px-4 py-3 font-semibold" key={heading}>{heading}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {decisions.map((decision) => (
-            <tr key={decision.customer.id} className="hover:bg-background/50 transition-colors">
+           {decisions.map((decision, index) => (
+             <motion.tr
+               key={decision.customer.id}
+               initial={animateRows && !reducedMotion ? { opacity: 0, y: 6 } : false}
+               animate={{ opacity: 1, y: 0 }}
+               transition={{ duration: reducedMotion ? 0 : 0.2, delay: animateRows && !reducedMotion ? index * 0.06 : 0, ease: "easeOut" }}
+               className="hover:bg-background/50 transition-colors"
+             >
               <td className="px-4 py-3"><div className="font-bold text-foreground">{decision.customer.name}</div><div className="text-xs font-medium text-muted-foreground mt-0.5">{decision.customer.id}</div></td>
               <td className="px-4 py-3 text-foreground font-medium">{decision.cohort}</td>
               <td className="px-4 py-3"><Badge tone={actionTone(decision.selectedAction)}>{decision.selectedAction}</Badge></td>
@@ -769,7 +888,7 @@ function DecisionTable({ decisions, onSelect }: { decisions: Decision[]; onSelec
               <td className="px-4 py-3 text-right">
                 <button type="button" data-testid={`link-view-decision-${decision.customer.id}`} className="inline-flex items-center gap-1 text-primary font-semibold hover:underline" onClick={() => onSelect(decision.customer.id)}>View decision <ChevronRight size={14} /></button>
               </td>
-            </tr>
+             </motion.tr>
           ))}
         </tbody>
       </table>
@@ -792,9 +911,15 @@ function Detail({
 }) {
   const weightedSignals = decision.scoreBreakdown.reduce((total, item) => total + item.contribution, 0);
   const canOpenStudio = decision.selectedAction !== "No recommendation" && decision.selectedAction !== "Resume account";
+  const highestRawScore = ACTIONS
+    .map((action) => ({ action, score: decision.candidateScores[action] }))
+    .filter((item): item is { action: Action; score: number } => item.score !== null)
+    .sort((left, right) => right.score - left.score)[0];
+  const suppressedActions = ACTIONS.filter((action) => decision.candidateScores[action] === null);
+  const hasPriorityOverride = Boolean(highestRawScore && highestRawScore.action !== decision.selectedAction);
   return (
     <div className="bg-card border border-border rounded-lg shadow-sm h-full flex flex-col">
-      <div className="p-6 border-b border-border flex justify-between items-start bg-background gap-4">
+       <div className="p-6 border-b border-border flex flex-wrap justify-between items-start bg-background gap-4">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-card border border-border flex items-center justify-center text-lg font-bold text-foreground shadow-sm">{decision.customer.initials}</div>
           <div><h2 className="text-xl font-bold text-foreground leading-tight">{decision.customer.name}</h2><p className="text-sm font-medium text-muted-foreground mt-1">{decision.customer.id} · {decision.cohort} · {decision.stateLabel}</p></div>
@@ -811,14 +936,21 @@ function Detail({
         <div className="mt-3 flex flex-wrap gap-2">
           <Badge tone={actionTone(decision.selectedAction)}>{decision.selectedScore === null ? "No score calculated" : `${decision.selectedScore} Action Fit Score`}</Badge>
           {decision.a2tStatus !== "Not achieved" && <Badge tone="green">{decision.a2tStatus}</Badge>}
+          {highestRawScore && <Badge tone="slate">Highest raw score · {highestRawScore.action} ({highestRawScore.score})</Badge>}
         </div>
+        {hasPriorityOverride && highestRawScore && (
+          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+            <b className="block text-primary mb-1">Policy / lifecycle priority override</b>
+            Selected by lifecycle priority: {decision.replacementRationale}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-6 flex-1 min-h-0 overflow-y-auto">
         <div>
           <h3 className="font-bold text-foreground mb-5">Decision rationale</h3>
           <div className="relative pl-5 space-y-5 before:content-[''] before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-border">
-            <div className="relative text-sm"><span className="absolute left-[-24px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-card" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Current state</b>{decision.stateLabel} · {decision.accountState.uccStatus} UCC · {decision.accountState.kraStatus} KRA</p></div>
+            <div className="relative text-sm"><span className="absolute left-[-24px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-card" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Current account state</b>{decision.stateLabel} · KRA: {decision.accountState.kraStatus} · UCC: {decision.accountState.uccStatus} · Segment activation: {decision.accountState.segmentStatus === "Activated" ? "Complete" : "Incomplete"}</p></div>
             <div className="relative text-sm"><span className="absolute left-[-23px] top-1.5 w-2 h-2 rounded-full bg-border" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Completed actions</b>{decision.completedActions.length ? decision.completedActions.join(" · ") : "None recorded"}</p></div>
             <div className="relative text-sm"><span className="absolute left-[-23px] top-1.5 w-2 h-2 rounded-full bg-border" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Customer-owned context</b>{decision.customerOwnedDeepLinkContext}</p></div>
           </div>
@@ -833,9 +965,9 @@ function Detail({
         <div>
           <h3 className="font-bold text-foreground mb-1 flex items-baseline gap-2">Action Fit Score <TooltipHint label="Score definition" text="A deterministic fit score from account state and five normalized intent signals. Completed actions are removed before selection." /> <strong className="text-2xl text-primary">{decision.selectedScore ?? "—"}</strong></h3>
           <p className="text-sm font-medium text-muted-foreground mb-6">Supporting evidence under Policy v{decision.policyVersion}</p>
-          <div className="space-y-3 mb-5">
+           <div className="space-y-3 mb-5">
             {decision.scoreBreakdown.length === 0
-              ? <div className="bg-background border border-border rounded-lg p-4 text-sm text-muted-foreground">KRA / KYC rejection is recovery-only. No product score is calculated.</div>
+               ? <div className="bg-background border border-border rounded-lg p-4 text-sm text-muted-foreground">{decision.accountState.kraStatus === "Rejected" ? "KRA / KYC rejection is recovery-only. No product score is calculated." : decision.a2tStatus !== "Not achieved" ? "A2T is already achieved. No repeat product score is calculated." : "No product score is calculated for this state."}</div>
               : decision.scoreBreakdown.map((item, index) => (
                 <div className="flex items-center gap-3 text-sm" key={item.key}>
                   <span className="w-1/3 text-muted-foreground font-medium truncate">{item.label}</span>
@@ -846,6 +978,7 @@ function Detail({
                 </div>
               ))}
           </div>
+           {suppressedActions.length > 0 && <div className="mb-5 rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground"><b className="text-foreground">Suppressed actions</b><div className="mt-1 flex flex-wrap gap-1.5">{suppressedActions.map((action) => <span className="rounded border border-border px-1.5 py-0.5" key={action}>{action}</span>)}</div></div>}
           <button type="button" data-testid="button-toggle-calculation" className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors uppercase tracking-wider" onClick={onToggleExpanded}>
             {expanded ? "Hide score calculation" : "Show score calculation"} <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
           </button>
@@ -1204,11 +1337,11 @@ function NudgeStudio({
 
   return (
     <motion.div initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} className="fixed inset-0 bg-foreground/20 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-      <motion.div initial={reducedMotion ? false : { opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, scale: 0.98, y: 8 }} transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }} className="bg-card rounded-xl shadow-2xl border border-border w-full max-w-4xl max-h-full flex flex-col overflow-hidden">
+      <motion.div role="dialog" aria-modal="true" aria-labelledby="nudge-studio-title" initial={reducedMotion ? false : { opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, scale: 0.98, y: 8 }} transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }} className="bg-card rounded-xl shadow-2xl border border-border w-full max-w-4xl max-h-full flex flex-col overflow-hidden">
         <div className="p-5 border-b border-border flex justify-between items-start bg-background">
           <div>
             <div className="text-xs font-bold text-primary uppercase tracking-wider mb-1">NUDGE STUDIO · {approved ? "APPROVED WORKFLOW" : "LOCAL DRAFT"}</div>
-            <h2 className="text-2xl font-bold text-foreground">{decision.selectedAction}</h2>
+             <h2 id="nudge-studio-title" className="text-2xl font-bold text-foreground">{decision.selectedAction}</h2>
           </div>
           <button type="button" data-testid="button-close-studio" aria-label="Close Nudge Studio" className="p-2 text-muted-foreground hover:bg-border/50 rounded-lg transition-colors" onClick={onClose}><X size={20} /></button>
         </div>

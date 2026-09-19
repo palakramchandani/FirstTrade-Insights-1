@@ -1,0 +1,132 @@
+Paste this into Replit/Codex:
+
+```text
+Redesign and improve the FirstTrade Decision Centre into a highly animated, premium “living decision engine” experience. The first landing moment should feel impressive and intentional—not like a static SaaS dashboard—while keeping the product clear, fast, accessible, and suitable for a financial operations workspace.
+
+Do not change the product’s core information architecture or synthetic data model unless required to fix an issue below. Preserve all existing pages and workflows.
+
+DESIGN DIRECTION
+Create a visual language that feels like an intelligent activation-control room:
+- Crisp financial-operations UI with a restrained blue accent system.
+- Motion should communicate state, confidence, progression, and cause/effect—not be decorative noise.
+- Prefer polished transform and opacity animations. Avoid expensive layout animations, continuous distracting loops, or excessive bouncing.
+- Respect `prefers-reduced-motion`; all essential content must work with motion disabled.
+- Keep interaction animations around 150–450ms. The first-load sequence may run for up to ~1.2 seconds.
+
+GLOBAL MOTION SYSTEM
+1. First landing / Overview:
+   - Build a memorable entrance sequence.
+   - The activation journey should animate from “Post e-sign” through “A2T” as a signal/pulse travels across the flow.
+   - KPI numbers should count up once, with subtle stagger.
+   - The Priority Decisions card should rise in after the flow, with rows revealing progressively.
+   - Use subtle ambient depth, but do not use heavy particle effects or distracting loops.
+
+2. Navigation:
+   - Replace any broad fade that makes the destination page temporarily appear blank or broken.
+   - Use a fast staged page transition: page title first, key content next, secondary cards last.
+   - Keep the sidebar active-state transition crisp and immediate.
+
+3. Shared components:
+   - Cards should have subtle hover elevation and border/accent shifts.
+   - Buttons should have refined press/hover feedback.
+   - Score bars should animate their fill only when entering the viewport or changing.
+   - Toasts, drawers, modals, filters, and disclosures should animate predictably and remain keyboard accessible.
+
+PAGE-SPECIFIC ANIMATION REQUIREMENTS
+Overview:
+- Animate the activation flow as a connected, intelligent system.
+- Animate KPI counters and priority-decision rows.
+- Make the “Open decision queue” action visually prominent but not flashy.
+
+Cohorts:
+- Reveal stage cards in sequence along the vertical journey.
+- Animate the selected cohort drill-down transition into Decisions.
+- Visually distinguish externally pending states, recovery-only states, and customer-action states.
+
+Decisions:
+- When switching customers, animate the selected row, recommendation title, score bars, and rationale timeline.
+- When score calculation expands, reveal the calculation progressively.
+- Clearly distinguish:
+  - selected recommendation,
+  - highest raw score,
+  - suppressed action,
+  - policy/safety override.
+- If a policy override selects an action that is not the highest score, show a concise explanation such as:
+  “Selected by lifecycle priority: funding is already in progress.”
+- Do not make it look like the system selected a lower score by mistake.
+
+Nudge Studio:
+- Make it feel like a premium focused workflow.
+- Modal should enter smoothly with backdrop blur.
+- Animate In-app, Push, and WhatsApp previews as a morph/slide rather than a blank fade.
+- Animate selected copy variants into the message preview.
+- Keep Save draft and Approve workflow behavior unchanged unless explicitly requested.
+
+Policy Studio:
+- Animate policy-impact previews and before/after recommendation changes.
+- When values change, visually show which customer decisions are affected.
+- Do not publish automatically. Preserve the existing publish confirmation flow.
+
+Measurement:
+- Add subtle event-trail progression and metric emphasis.
+- Keep the page trustworthy and analytical; do not over-animate.
+
+Simulator:
+- When a demo scenario or product-state control changes, animate:
+  - the selected recommendation,
+  - candidate ranking changes,
+  - score deltas,
+  - suppressed states.
+- Add a clear animated “Recommendation updated” confirmation that does not interrupt work.
+- Make the relationship between state changes and the recommendation immediately understandable.
+
+BUGS AND USABILITY ISSUES TO FIX
+1. Responsive/mobile:
+   - The current desktop sidebar remains fixed on narrow screens and cuts off the content.
+   - Build responsive layouts for mobile, tablet, and desktop.
+   - On mobile, replace the persistent sidebar with a compact header/menu or bottom navigation.
+   - Ensure there is no unintended horizontal overflow at 390px width.
+   - Test at 390px, 768px, 1024px, and desktop widths.
+
+2. Decision count consistency:
+   - The sidebar badge shows 6 decisions, while the queue and Policy Studio preview show 7.
+   - Use one source of truth and ensure all counts agree.
+
+3. Cohort drill-down state:
+   - When navigating from Cohorts to Decisions, clear or intentionally reconcile any existing search query.
+   - Never show “No customers found” while a stale, unrelated customer detail remains visible.
+   - Ensure the selected customer always belongs to the visible filtered result set.
+
+4. Non-responsive controls:
+   - Make Notifications visibly open a notification panel, or remove/disable it clearly if it is not implemented.
+   - Make the Decisions filter control open a working filter popover, or remove it until implemented.
+
+5. State language clarity:
+   - Make current state labels explicit and unambiguous, for example:
+     “KRA: Approved · UCC: Complete · Segment activation: Incomplete”
+   - Avoid ambiguous strings such as “Segment activation · Complete UCC · Approved KRA.”
+   - Ensure Cohort labels, customer state, and recommended action do not appear contradictory.
+
+ACCESSIBILITY AND QUALITY
+- Maintain semantic headings, labels, keyboard navigation, focus states, and accessible dialogs.
+- Honor reduced motion.
+- Do not hide content behind animation delays.
+- Avoid animation that blocks clicking, reading, or scrolling.
+- Ensure the app remains performant and responsive.
+
+VALIDATION
+After implementation, verify:
+- Overview, Cohorts, Decisions, Nudge Studio, Policy Studio, Measurement, and Simulator.
+- All seven Simulator presets.
+- Cohort-to-Decision navigation with an existing search term.
+- Search, filters, notification control, score calculation disclosure, and channel previews.
+- Mobile layout at 390px with no horizontal clipping.
+- Decision counts are consistent everywhere.
+- No browser console errors.
+
+Deliver the completed implementation with a concise summary of:
+1. animation system added,
+2. responsive fixes,
+3. behavior/logic fixes,
+4. validation performed.
+```
