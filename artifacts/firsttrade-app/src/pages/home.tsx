@@ -1,59 +1,151 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowRight, BarChart3, Bell, Check, ChevronDown, ChevronRight,
-  CircleAlert, FlaskConical, GitBranch, LayoutDashboard,
-  MessageSquare, Search, Send, Settings2, SlidersHorizontal, 
-  Sparkles, Target, UserRound, X, Zap
+  ArrowRight,
+  BarChart3,
+  Bell,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  FlaskConical,
+  GitBranch,
+  Info,
+  LayoutDashboard,
+  MessageSquare,
+  Search,
+  Send,
+  Settings2,
+  SlidersHorizontal,
+  Sparkles,
+  Target,
+  UserRound,
+  X,
+  Zap,
 } from "lucide-react";
+import {
+  ACTIONS,
+  type Action,
+  type Channel,
+  createDecision,
+  CUSTOMER_PROFILES,
+  DEFAULT_POLICY,
+  decisionsFor,
+  type Decision,
+  type DecisionAction,
+  type Policy,
+  profileFromSimulator,
+  RECOVERY_ACTION,
+  type SignalKey,
+  SIGNAL_KEYS,
+  SIGNAL_LABELS,
+  SCENARIO_PRESETS,
+  SIMULATOR_SCENARIOS,
+  stageData,
+  type SimulatorScenario,
+  type SimulatorState,
+} from "@/lib/firsttrade";
 
 type Area = "Overview" | "Cohorts" | "Decisions" | "Policy Studio" | "Measurement" | "Simulator";
-type Action = "Add Funds" | "Create Pre-order" | "Start MF Investing" | "Activate Segment" | "Take First Trade";
-type Signals = { order: number; watchlist: number; mf: number; segment: number; funding: number };
-
-const customers = [
-  { id: "FT-20481", name: "Arjun Mehta", initials: "AM", cohort: "Research-led", state: "UCC Mapping", action: "Add Funds" as Action, why: "Pre-order started; funding is the next safe step.", channel: "In-app", score: 76, policy: "v1.0" },
-  { id: "FT-20317", name: "Nisha Kulkarni", initials: "NK", cohort: "MF-first", state: "MF Account", action: "Start MF Investing" as Action, why: "Scheme detail and SIP calculator activity is strong.", channel: "WhatsApp", score: 81, policy: "v1.0" },
-  { id: "FT-20188", name: "Rohit Sharma", initials: "RS", cohort: "Intent-rich", state: "Exchange Approval", action: "Take First Trade" as Action, why: "Approval is complete and instrument selection is recent.", channel: "In-app", score: 72, policy: "v1.0" },
-  { id: "FT-19942", name: "Priya Iyer", initials: "PI", cohort: "New explorer", state: "KRA", action: "Complete KYC / KRA" as Action, why: "KRA was rejected; recovery is the only eligible path.", channel: "Push", score: 0, policy: "v1.0" },
-];
-
-const stageData = [
-  { title: "KRA Stage", pending: "Pending externally", can: "Complete KYC / KRA", cohort: "New explorer", count: "1,204", picks: ["Complete KYC / KRA", "Resume account"] },
-  { title: "UCC Mapping Stage", pending: "Pending externally", can: "Add Funds or create a pre-order", cohort: "Intent-rich", count: "846", picks: ["Add Funds", "Create Pre-order"] },
-  { title: "MF Account Stage", pending: "Pending externally", can: "Start MF Investing", cohort: "MF-first", count: "429", picks: ["Start MF Investing", "Review scheme"] },
-  { title: "Exchange Trading Approval Stage", pending: "Pending externally", can: "Take First Trade", cohort: "Research-led", count: "188", picks: ["Take First Trade", "Review watchlist"] },
-];
+type Tone = "blue" | "green" | "red" | "slate";
+type SimulatorField = keyof SimulatorState | "scenario";
 
 const nav = [
-  { label: "Overview", icon: LayoutDashboard }, { label: "Cohorts", icon: GitBranch },
-  { label: "Decisions", icon: Target }, { label: "Policy Studio", icon: Settings2 },
-  { label: "Measurement", icon: BarChart3 }, { label: "Simulator", icon: FlaskConical },
+  { label: "Overview", icon: LayoutDashboard },
+  { label: "Cohorts", icon: GitBranch },
+  { label: "Decisions", icon: Target },
+  { label: "Policy Studio", icon: Settings2 },
+  { label: "Measurement", icon: BarChart3 },
+  { label: "Simulator", icon: FlaskConical },
 ] as const;
 
-const weights: Record<Action, number[]> = {
-  "Add Funds": [25, 25, 10, 10, 10], "Create Pre-order": [25, 20, 0, 0, 35],
-  "Start MF Investing": [5, 5, 45, 0, 25], "Activate Segment": [10, 10, 0, 50, 10],
-  "Take First Trade": [25, 20, 0, 0, 35],
+const stateLabels: Record<SimulatorField, string> = {
+  eSignComplete: "Post e-sign",
+  kraStatus: "KRA status",
+  uccStatus: "UCC mapping",
+  mfAccountStatus: "MF account",
+  exchangeStatus: "Exchange approval",
+  fundingStatus: "Funding flow",
+  preOrderStatus: "Pre-order",
+  mfOrderStatus: "MF order",
+  firstTradeStatus: "First trade",
+  segmentStatus: "Segment activation",
+  a2tStatus: "A2T outcome",
+  savedWatchlist: "Saved watchlist",
+  sipCalculatorUsed: "SIP calculator activity",
+  segmentInterest: "Segment intent",
+  selectedInstrument: "Selected instrument",
+  optOut: "Opt-out",
+  ignoredPushes: "Ignored pushes",
+  scenario: "Demo scenario",
 };
-const labels = ["Order-flow intent", "Watchlist / research", "MF intent", "F&O / Commodity intent", "Funding / pre-order readiness"];
 
-function Badge({ children, tone = "blue" }: { children: React.ReactNode; tone?: "blue" | "green" | "red" | "slate" }) {
-  const tones = {
+function Badge({ children, tone = "blue" }: { children: ReactNode; tone?: Tone }) {
+  const tones: Record<Tone, string> = {
     blue: "bg-primary/10 text-primary border-primary/20",
     green: "bg-[#18794E]/10 text-[#18794E] border-[#18794E]/20",
     red: "bg-destructive/10 text-destructive border-destructive/20",
-    slate: "bg-background text-muted-foreground border-border"
+    slate: "bg-background text-muted-foreground border-border",
   };
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${tones[tone]}`}>{children}</span>;
 }
 
-function Button({ children, onClick, primary = false, disabled = false, "data-testid": testId }: any) {
+function TooltipHint({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <button 
+    <span className="relative inline-flex align-middle">
+      <button
+        type="button"
+        data-testid={`button-tooltip-${label.toLowerCase().replace(/\s+/g, "-")}`}
+        aria-label={label}
+        className="ml-1 text-muted-foreground hover:text-primary transition-colors duration-150"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      >
+        <Info size={13} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.span
+            initial={{ opacity: 0, y: 2 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 2 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            role="tooltip"
+            className="absolute left-0 top-5 z-30 w-56 rounded-md border border-border bg-card p-2 text-left text-xs font-medium leading-relaxed text-muted-foreground shadow-lg"
+          >
+            {text}
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </span>
+  );
+}
+
+function Button({
+  children,
+  onClick,
+  primary = false,
+  disabled = false,
+  testId,
+  className = "",
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  primary?: boolean;
+  disabled?: boolean;
+  testId?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
       data-testid={testId}
-      disabled={disabled} 
-      onClick={onClick} 
-      className={`inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${primary ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 shadow-sm' : 'bg-card text-foreground border-border hover:bg-background shadow-sm'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 border active:translate-y-px ${primary ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90 shadow-sm" : "bg-card text-foreground border-border hover:bg-background shadow-sm"} ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
     >
       {children}
     </button>
@@ -70,447 +162,261 @@ function SectionTitle({ kicker, title, copy }: { kicker?: string; title: string;
   );
 }
 
-function scoreFor(action: Action, s: Signals, base = 20) {
-  const vals = [s.order, s.watchlist, s.mf, s.segment, s.funding];
-  return Math.round(base + vals.reduce((a, v, i) => a + v * weights[action][i], 0));
+function actionTone(action: DecisionAction): Tone {
+  if (action === RECOVERY_ACTION) return "red";
+  if (action === "No recommendation") return "slate";
+  return "blue";
 }
 
+function clonePolicy(policy: Policy): Policy {
+  return {
+    ...policy,
+    weights: ACTIONS.reduce((weights, action) => {
+      weights[action] = { ...policy.weights[action] };
+      return weights;
+    }, {} as Policy["weights"]),
+    channelPlan: { ...policy.channelPlan },
+    suppressionRules: [...policy.suppressionRules],
+  };
+}
+
+function policyWeightTotal(policy: Policy, action: Action) {
+  return SIGNAL_KEYS.reduce((total, key) => total + policy.weights[action][key], 0);
+}
+
+type PolicyChange = {
+  id: string;
+  name: string;
+  before: DecisionAction;
+  after: DecisionAction;
+};
+
+type PolicyPreview = {
+  changed: PolicyChange[];
+  evaluatedCount: number;
+};
+
 export default function Home() {
+  const reducedMotion = Boolean(useReducedMotion());
   const [area, setArea] = useState<Area>("Overview");
-  const [selected, setSelected] = useState(customers[0]);
+  const [selectedId, setSelectedId] = useState(CUSTOMER_PROFILES[0].id);
   const [search, setSearch] = useState("");
-  const [studio, setStudio] = useState(false);
-  const [published, setPublished] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [scenario, setScenarioState] = useState("Research-led account");
-  const [signals, setSignals] = useState<Signals>({ order: .7, watchlist: .8, mf: .4, segment: .3, funding: .8 });
-  const [states, setStates] = useState({ esign: true, kra: true, ucc: true, mf: false, exchange: false, a2t: false });
-  const filtered = customers.filter(c => `${c.name} ${c.cohort} ${c.action}`.toLowerCase().includes(search.toLowerCase()));
-  
-  const simScores = useMemo(() => {
-    const base = states.esign && states.kra && !states.a2t ? 20 : 0;
-    return (Object.keys(weights) as Action[]).map(a => ({ action: a, score: scoreFor(a, signals, base) })).sort((a, b) => b.score - a.score);
-  }, [signals, states.esign, states.kra, states.a2t]);
-  
-  const recommendation = states.kra === false ? "Complete KYC / KRA" : states.a2t ? "No recommendation" : simScores[0].score >= 60 ? simScores[0].action : "Resume account";
+  const [cohortFilter, setCohortFilter] = useState<string | null>(null);
+  const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
+  const [studioTarget, setStudioTarget] = useState<{ kind: "customer"; id: string } | { kind: "simulator"; decision: Decision } | null>(null);
+  const [copyOverrides, setCopyOverrides] = useState<Record<string, string>>({});
+  const [workflowStatuses, setWorkflowStatuses] = useState<Record<string, "Draft" | "Approved">>({});
 
-  const simulatorScenarios = [
-    "Research-led account", "KRA rejected", "UCC pending", "MF-first customer", 
-    "Exchange approved", "High intent F&O", "A2T achieved"
-  ];
+  const [livePolicy, setLivePolicy] = useState<Policy>(() => clonePolicy(DEFAULT_POLICY));
+  const [draftPolicy, setDraftPolicy] = useState<Policy>(() => ({ ...clonePolicy(DEFAULT_POLICY), version: "1.1" }));
+  const [policyDirty, setPolicyDirty] = useState(false);
+  const [policyPreview, setPolicyPreview] = useState<PolicyPreview | null>(null);
+  const [policyNotice, setPolicyNotice] = useState("");
 
-  const setScenario = (v: string) => {
-    setScenarioState(v);
-    if (v === "Research-led account") { setStates({ esign: true, kra: true, ucc: true, mf: false, exchange: false, a2t: false }); setSignals({ order: .7, watchlist: .8, mf: .4, segment: .3, funding: .8 }); }
-    if (v === "KRA rejected") { setStates({ esign: true, kra: false, ucc: false, mf: false, exchange: false, a2t: false }); setSignals({ order: 0, watchlist: 0, mf: 0, segment: 0, funding: 0 }); }
-    if (v === "UCC pending") { setStates({ esign: true, kra: true, ucc: false, mf: false, exchange: false, a2t: false }); setSignals({ order: .5, watchlist: .5, mf: .5, segment: .5, funding: .5 }); }
-    if (v === "MF-first customer") { setStates({ esign: true, kra: true, ucc: true, mf: false, exchange: false, a2t: false }); setSignals({ order: 0, watchlist: .6, mf: 1, segment: .7, funding: .3 }); }
-    if (v === "Exchange approved") { setStates({ esign: true, kra: true, ucc: true, mf: true, exchange: true, a2t: false }); setSignals({ order: 1, watchlist: 1, mf: .7, segment: 1, funding: .8 }); }
-    if (v === "High intent F&O") { setStates({ esign: true, kra: true, ucc: true, mf: false, exchange: false, a2t: false }); setSignals({ order: .9, watchlist: .9, mf: 0, segment: 1, funding: .5 }); }
-    if (v === "A2T achieved") { setStates({ esign: true, kra: true, ucc: true, mf: true, exchange: true, a2t: true }); }
+  const [scenario, setScenarioState] = useState<SimulatorScenario | "Manual controls">("Research-led account");
+  const [simulatorState, setSimulatorState] = useState<SimulatorState>(() => ({ ...SCENARIO_PRESETS["Research-led account"] }));
+  const [changedField, setChangedField] = useState<SimulatorField | null>(null);
+  const [changedScoreActions, setChangedScoreActions] = useState<Action[]>([]);
+  const [recommendationNotice, setRecommendationNotice] = useState("");
+  const [simulatorCalculationOpen, setSimulatorCalculationOpen] = useState(false);
+
+  const decisions = useMemo(() => decisionsFor(livePolicy), [livePolicy]);
+  const decisionsById = useMemo(() => new Map(decisions.map((decision) => [decision.customer.id, decision])), [decisions]);
+  const selectedDecision = decisionsById.get(selectedId) ?? decisions[0];
+  const simulatorDecision = useMemo(
+    () => createDecision(profileFromSimulator(simulatorState), livePolicy),
+    [livePolicy, simulatorState],
+  );
+  const studioDecision = studioTarget?.kind === "simulator"
+    ? studioTarget.decision
+    : studioTarget
+      ? decisionsById.get(studioTarget.id) ?? selectedDecision
+      : null;
+
+  const filteredDecisions = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return decisions.filter((decision) => {
+      const matchesCohort = !cohortFilter || decision.cohort === cohortFilter;
+      const searchable = `${decision.customer.name} ${decision.customer.id} ${decision.cohort} ${decision.selectedAction} ${decision.stateLabel}`.toLowerCase();
+      return matchesCohort && (!normalizedSearch || searchable.includes(normalizedSearch));
+    });
+  }, [cohortFilter, decisions, search]);
+
+  const draftDecisions = useMemo(() => decisionsFor(draftPolicy), [draftPolicy]);
+  const policyValid = draftPolicy.threshold >= 0
+    && draftPolicy.threshold <= 100
+    && ACTIONS.every((action) => policyWeightTotal(draftPolicy, action) === 80);
+
+  const previousScoresRef = useRef<Record<Action, number | null> | null>(null);
+  const previousRecommendationRef = useRef<DecisionAction | null>(null);
+
+  useEffect(() => {
+    if (filteredDecisions.length > 0 && !filteredDecisions.some((decision) => decision.customer.id === selectedId)) {
+      setSelectedId(filteredDecisions[0].customer.id);
+    }
+  }, [filteredDecisions, selectedId]);
+
+  useEffect(() => {
+    const previous = previousScoresRef.current;
+    if (previous) {
+      setChangedScoreActions(ACTIONS.filter((action) => previous[action] !== simulatorDecision.candidateScores[action]));
+    }
+    previousScoresRef.current = simulatorDecision.candidateScores;
+  }, [simulatorDecision]);
+
+  useEffect(() => {
+    const previous = previousRecommendationRef.current;
+    if (previous && previous !== simulatorDecision.selectedAction) {
+      setRecommendationNotice("Recommendation updated");
+      const timeout = window.setTimeout(() => setRecommendationNotice(""), 1500);
+      return () => window.clearTimeout(timeout);
+    }
+    previousRecommendationRef.current = simulatorDecision.selectedAction;
+    return undefined;
+  }, [simulatorDecision.selectedAction]);
+
+  useEffect(() => {
+    if (!changedField) return;
+    const timeout = window.setTimeout(() => setChangedField(null), 800);
+    return () => window.clearTimeout(timeout);
+  }, [changedField]);
+
+  const openCustomerDecision = (id: string, nextArea: Area = "Decisions") => {
+    setSelectedId(id);
+    setArea(nextArea);
+    setExpandedCustomerId(null);
   };
 
-  const overview = (
-    <>
-      <SectionTitle title="FirstTrade Decision Centre" copy="Turn account activation status and customer behaviour into the most relevant next action." />
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-card border border-border p-4 rounded-lg shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Customers requiring a next action</div>
-          <div className="text-2xl font-bold text-foreground" data-testid="metric-1">2,667</div>
-        </div>
-        <div className="bg-card border border-border p-4 rounded-lg shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">A2T achieved through pre-order or MF</div>
-          <div className="text-2xl font-bold text-foreground" data-testid="metric-2">1,184</div>
-        </div>
-        <div className="bg-card border border-border p-4 rounded-lg shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Cohort defaults overridden by FirstTrade</div>
-          <div className="text-2xl font-bold text-foreground" data-testid="metric-3">318</div>
-        </div>
-      </div>
-      
-      <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
-        <div className="p-4 border-b border-border flex justify-between items-end">
-          <div>
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">ACTIVATION FLOW</div>
-            <h2 className="text-lg font-bold text-foreground">Where customers pause</h2>
-          </div>
-          <span className="text-sm text-muted-foreground">Last 7 days · 8,412 accounts</span>
-        </div>
-        <div className="p-6 flex items-start justify-between relative">
-          {["Post e-sign", "KRA", "UCC Mapping", "MF Account", "Exchange Approval", "A2T"].map((x, i) => (
-            <div className="flex flex-col flex-1 items-center relative z-10" key={x}>
-              <div className="text-xl font-bold text-foreground mb-2">{[8412, 7901, 6540, 4862, 3274, 1184][i].toLocaleString()}</div>
-              <div className="w-full px-2 mb-3">
-                <div className="h-2 bg-background border border-border rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full" style={{ width: `${100 - i * 12}%` }} />
-                </div>
-              </div>
-              <span className="text-xs font-medium text-muted-foreground text-center">{x}</span>
-            </div>
-          ))}
-          <div className="absolute top-[3.25rem] left-0 w-full flex justify-between px-[8%] pointer-events-none text-border">
-            {[1,2,3,4,5].map(i => <ArrowRight key={i} size={16} />)}
-          </div>
-        </div>
-      </div>
+  const openCohort = (cohort: string) => {
+    const match = decisions.find((decision) => decision.cohort === cohort);
+    setCohortFilter(cohort);
+    if (match) setSelectedId(match.customer.id);
+    setArea("Decisions");
+  };
 
-      <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
-        <div className="p-4 border-b border-border flex justify-between items-center bg-background">
-          <div>
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">QUEUE · 2,667 OPEN</div>
-            <h2 className="text-lg font-bold text-foreground">Priority Decisions</h2>
-          </div>
-          <Button onClick={() => setArea("Decisions")} data-testid="button-open-decision-queue">Open decision queue <ArrowRight size={14} /></Button>
-        </div>
-        <DecisionTable onSelect={c => { setSelected(c); setArea("Decisions"); }} />
-      </div>
-    </>
-  );
+  const openStudio = (decision: Decision) => {
+    setStudioTarget(decision.customer.id === "SIM-001"
+      ? { kind: "simulator", decision }
+      : { kind: "customer", id: decision.customer.id });
+  };
 
-  const cohorts = (
-    <>
-      <SectionTitle title="Cohorts" copy="Understand the externally pending step, then choose the safest customer action still available." />
-      <div className="space-y-4">
-        {stageData.map((s, i) => (
-          <div className="bg-card border border-border rounded-lg shadow-sm p-5 flex gap-6 relative" key={s.title}>
-            <div className="flex flex-col items-center">
-              <div className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground mb-2">{i + 1}</div>
-              {i !== stageData.length - 1 && <div className="w-px bg-border flex-1" />}
-            </div>
-            <div className="flex-1">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">STAGE {i + 1}</div>
-                  <h2 className="text-xl font-bold text-foreground flex items-center gap-3">
-                    {s.title}
-                    <Badge tone="slate">{s.pending}</Badge>
-                  </h2>
-                </div>
-                <Button onClick={() => setArea("Decisions")} data-testid={`button-view-customers-${i}`}>View customers <ArrowRight size={14} /></Button>
-              </div>
-              
-              <div className="grid grid-cols-4 gap-6 bg-background border border-border rounded p-4 text-sm">
-                <div>
-                  <div className="text-muted-foreground mb-1">Customer can still do</div>
-                  <div className="font-semibold text-foreground">{s.can}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Default cohort action</div>
-                  <div className="font-semibold text-primary">{s.picks[0]}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Customers here</div>
-                  <div className="font-semibold text-foreground text-lg">{s.count}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-2">Top selected actions</div>
-                  <div className="space-y-2">
-                    {s.picks.map((p, j) => (
-                      <div key={p} className="flex justify-between items-center text-xs border-b border-border/50 pb-1 last:border-0 last:pb-0">
-                        <span className="font-medium text-foreground">{p}</span>
-                        <span className="text-muted-foreground">{[38, 24][j]}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-6 bg-destructive/5 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
-        <CircleAlert size={18} className="text-destructive shrink-0 mt-0.5" />
-        <div className="flex-1 text-destructive">
-          <b className="block mb-1">KRA / KYC rejected is recovery-only</b>
-          <p className="text-sm opacity-90">FirstTrade does not score or recommend trading actions here. The only eligible path is Complete Re-KYC / Re-KRA.</p>
-        </div>
-        <Button onClick={() => setScenario("KRA rejected")} data-testid="button-view-recovery-cohort">View recovery cohort</Button>
-      </div>
-    </>
-  );
+  const updateDraftThreshold = (value: number) => {
+    setDraftPolicy((current) => ({ ...current, threshold: value }));
+    setPolicyDirty(true);
+    setPolicyPreview(null);
+  };
 
-  const decisions = (
-    <div className="flex flex-col h-full animate-in fade-in duration-200">
-      <SectionTitle title="Decisions" copy="A deterministic queue for deciding the next activation action, with customer-safe reasoning." />
-      <div className="flex gap-6 flex-1 min-h-0">
-        <div className="w-80 bg-card border border-border rounded-lg shadow-sm flex flex-col shrink-0 overflow-hidden">
-          <div className="p-3 border-b border-border flex items-center gap-2 bg-background">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-2.5 top-2 text-muted-foreground" />
-              <input 
-                data-testid="input-search-customers"
-                className="w-full bg-card border border-border rounded text-sm py-1.5 pl-8 pr-2 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
-                value={search} 
-                onChange={e => setSearch(e.target.value)} 
-                placeholder="Search customer or cohort" 
+  const updateDraftWeight = (action: Action, key: SignalKey, value: number) => {
+    setDraftPolicy((current) => ({
+      ...current,
+      weights: {
+        ...current.weights,
+        [action]: { ...current.weights[action], [key]: Math.max(0, Number.isFinite(value) ? value : 0) },
+      },
+    }));
+    setPolicyDirty(true);
+    setPolicyPreview(null);
+  };
+
+  const previewPolicy = () => {
+    if (!policyValid) return;
+    const before = decisionsFor(livePolicy);
+    const after = draftDecisions;
+    const changed = after.flatMap((decision) => {
+      const previous = before.find((candidate) => candidate.customer.id === decision.customer.id);
+      return previous && previous.selectedAction !== decision.selectedAction
+        ? [{ id: decision.customer.id, name: decision.customer.name, before: previous.selectedAction, after: decision.selectedAction }]
+        : [];
+    });
+    setPolicyPreview({ changed, evaluatedCount: after.length });
+  };
+
+  const publishPolicy = () => {
+    if (!policyValid) return;
+    const nextPolicy = { ...clonePolicy(draftPolicy), version: "1.1" };
+    setLivePolicy(nextPolicy);
+    setDraftPolicy(clonePolicy(nextPolicy));
+    setPolicyDirty(false);
+    setPolicyPreview(null);
+    setPolicyNotice("Live simulated v1.1");
+    window.setTimeout(() => setPolicyNotice(""), 2200);
+  };
+
+  const setScenario = (nextScenario: SimulatorScenario) => {
+    setScenarioState(nextScenario);
+    setSimulatorState({ ...SCENARIO_PRESETS[nextScenario] });
+    setChangedField("scenario");
+  };
+
+  const updateSimulatorState = <K extends keyof SimulatorState>(field: K, value: SimulatorState[K]) => {
+    setScenarioState("Manual controls");
+    setSimulatorState((current) => ({ ...current, [field]: value }));
+    setChangedField(field);
+  };
+
+  const saveNudgeDraft = (decisionId: string, copy: string) => {
+    setCopyOverrides((current) => ({ ...current, [decisionId]: copy }));
+  };
+
+  const approveWorkflow = (decisionId: string) => {
+    setWorkflowStatuses((current) => ({ ...current, [decisionId]: "Approved" }));
+  };
+
+  const page = area === "Overview"
+    ? <OverviewPage decisions={decisions} onOpenQueue={() => setArea("Decisions")} onSelect={openCustomerDecision} reducedMotion={reducedMotion} />
+    : area === "Cohorts"
+      ? <CohortsPage onOpenCohort={openCohort} onRecovery={() => openCohort("New explorer")} reducedMotion={reducedMotion} />
+      : area === "Decisions"
+        ? (
+          <DecisionsPage
+            decisions={filteredDecisions}
+            selected={selectedDecision}
+            selectedId={selectedId}
+            search={search}
+            cohortFilter={cohortFilter}
+            expanded={expandedCustomerId === selectedId}
+            onSearch={setSearch}
+            onClearFilter={() => setCohortFilter(null)}
+            onSelect={(id) => openCustomerDecision(id)}
+            onToggleExpanded={() => setExpandedCustomerId((current) => current === selectedId ? null : selectedId)}
+            onStudio={openStudio}
+            reducedMotion={reducedMotion}
+          />
+        )
+        : area === "Policy Studio"
+          ? (
+            <PolicyStudioPage
+              livePolicy={livePolicy}
+              draftPolicy={draftPolicy}
+              dirty={policyDirty}
+              valid={policyValid}
+              preview={policyPreview}
+              notice={policyNotice}
+              onThreshold={updateDraftThreshold}
+              onWeight={updateDraftWeight}
+              onPreview={previewPolicy}
+              onPublish={publishPolicy}
+              reducedMotion={reducedMotion}
+            />
+          )
+          : area === "Measurement"
+            ? <MeasurementPage decision={selectedDecision} reducedMotion={reducedMotion} />
+            : (
+              <SimulatorPage
+                scenario={scenario}
+                state={simulatorState}
+                decision={simulatorDecision}
+                changedField={changedField}
+                changedScoreActions={changedScoreActions}
+                recommendationNotice={recommendationNotice}
+                calculationOpen={simulatorCalculationOpen}
+                onScenario={setScenario}
+                onChange={updateSimulatorState}
+                onOpenStudio={() => openStudio(simulatorDecision)}
+                onToggleCalculation={() => setSimulatorCalculationOpen((current) => !current)}
+                reducedMotion={reducedMotion}
               />
-            </div>
-            <button className="p-1.5 text-muted-foreground hover:bg-border/50 rounded transition-colors"><SlidersHorizontal size={16} /></button>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {filtered.map(c => (
-              <button 
-                data-testid={`button-queue-item-${c.id}`}
-                className={`w-full text-left p-3 border-b border-border flex items-center gap-3 transition-colors ${selected.id === c.id ? 'bg-background border-l-2 border-l-primary' : 'hover:bg-background border-l-2 border-l-transparent'}`}
-                onClick={() => setSelected(c)} 
-                key={c.id}
-              >
-                <div className="w-8 h-8 rounded-full bg-border flex items-center justify-center text-xs font-bold text-foreground shrink-0">{c.initials}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-foreground truncate">{c.name}</div>
-                  <div className="text-xs text-muted-foreground truncate">{c.cohort} · {c.state}</div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="text-lg font-bold text-foreground leading-none">{c.score}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-0.5">fit</div>
-                </div>
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className="p-4 text-center text-sm text-muted-foreground">No customers found.</div>
-            )}
-          </div>
-        </div>
-        <div className="flex-1">
-          <Detail customer={selected} expanded={expanded} setExpanded={setExpanded} onStudio={() => setStudio(true)} />
-        </div>
-      </div>
-    </div>
-  );
-
-  const policy = (
-    <div className="animate-in fade-in duration-200">
-      <SectionTitle title="Policy Studio" copy="Shape the decision policy locally, preview its impact, and publish a simulated version." />
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-lg shadow-sm p-6 flex flex-col gap-6">
-          <div className="flex justify-between items-start border-b border-border pb-4">
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">DRAFT POLICY</div>
-              <h2 className="text-xl font-bold text-foreground">Version 1.1 · Not published</h2>
-            </div>
-            <Badge tone="green">Current live · v1.0</Badge>
-          </div>
-          
-          <div>
-            <label className="flex items-center justify-between text-sm font-semibold text-foreground mb-4">
-              Selection threshold 
-              <input data-testid="input-threshold" className="w-16 bg-background border border-border rounded px-2 py-1 text-center font-normal focus:outline-none focus:border-primary" type="number" defaultValue={60} />
-            </label>
-            
-            <div className="space-y-4">
-              {(Object.keys(weights) as Action[]).map(a => (
-                <div className="text-sm" key={a}>
-                  <b className="block text-foreground mb-2">{a}</b>
-                  <div className="flex gap-2">
-                    {weights[a].map((w, i) => (
-                      <label key={i} className="flex-1 flex flex-col gap-1 text-[10px] font-semibold text-muted-foreground uppercase text-center">
-                        <span className="truncate" title={labels[i]}>{labels[i].split(" ")[0]}</span>
-                        <input data-testid={`input-weight-${a}-${i}`} defaultValue={w} type="number" className="w-full bg-background border border-border rounded px-1 py-1 text-center font-normal text-foreground focus:outline-none focus:border-primary" />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-3 gap-4 border-t border-border pt-4">
-            <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
-              Push timing
-              <select data-testid="select-push-timing" className="bg-background border border-border rounded px-2 py-1.5 font-normal focus:outline-none focus:border-primary" defaultValue="Within 24 hours">
-                <option>Within 24 hours</option><option>Next active session</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
-              WhatsApp timing
-              <select data-testid="select-wa-timing" className="bg-background border border-border rounded px-2 py-1.5 font-normal focus:outline-none focus:border-primary" defaultValue="After 48 hours">
-                <option>After 48 hours</option><option>Never</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
-              Max ignored pushes
-              <input data-testid="input-max-pushes" className="bg-background border border-border rounded px-2 py-1.5 font-normal focus:outline-none focus:border-primary" defaultValue="2" type="number" />
-            </label>
-          </div>
-          
-          <div className="flex gap-3 pt-4 border-t border-border">
-            <Button onClick={() => setPublished(false)} data-testid="button-preview-customers">Preview affected customers</Button>
-            <Button primary onClick={() => setPublished(true)} data-testid="button-publish-policy">Publish v1.1</Button>
-          </div>
-          
-          {published && (
-            <div className="bg-[#18794E]/10 text-[#18794E] border border-[#18794E]/20 p-3 rounded flex items-center gap-2 text-sm font-medium animate-in fade-in">
-              <Check size={16} /> Draft published as simulated Version 1.1
-            </div>
-          )}
-        </div>
-        
-        <div className="bg-background border border-border rounded-lg p-6 flex flex-col gap-6">
-          <div>
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">CHANGE REVIEW</div>
-            <h2 className="text-lg font-bold text-foreground">Before / after recommendations</h2>
-          </div>
-          
-          <div className="space-y-3 flex-1">
-            <div className="bg-card border border-border p-3 rounded text-sm flex items-center justify-between shadow-sm">
-              <span className="font-semibold text-foreground w-32 truncate">Arjun Mehta</span>
-              <b className="text-muted-foreground font-medium w-40 text-center">Add Funds</b>
-              <ArrowRight size={14} className="text-border" />
-              <b className="text-primary w-40 text-right">Create Pre-order</b>
-            </div>
-            <div className="bg-card border border-border p-3 rounded text-sm flex items-center justify-between shadow-sm">
-              <span className="font-semibold text-foreground w-32 truncate">Nisha Kulkarni</span>
-              <b className="text-muted-foreground font-medium w-40 text-center">Start MF Investing</b>
-              <ArrowRight size={14} className="text-border" />
-              <b className="text-primary w-40 text-right">Start MF Investing</b>
-            </div>
-          </div>
-          
-          <div className="border-t border-border pt-4">
-            <h3 className="font-bold text-foreground mb-3 text-sm">Version history</h3>
-            <div className="space-y-2 text-sm">
-              <p className="flex justify-between text-foreground"><b className="font-semibold">v1.0</b> <span className="text-muted-foreground">Live · 06 Feb 2025</span></p>
-              <p className="flex justify-between text-muted-foreground opacity-75"><b className="font-semibold">v0.9</b> <span>Archived · 28 Jan 2025</span></p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const measurement = (
-    <div className="animate-in fade-in duration-200">
-      <SectionTitle title="Measurement" copy="Instrument the activation decision without pretending the outcome is already known." />
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-lg shadow-sm p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full -z-0" />
-          <div className="relative z-10">
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-1">EXPERIMENT BRIEF</div>
-            <h2 className="text-2xl font-bold text-foreground mb-3">Hypothesis</h2>
-            <p className="text-foreground text-lg font-medium leading-relaxed mb-8">
-              If FirstTrade selects a customer-safe next action from account state and behaviour, more customers will reach A2T without increasing unwanted contact or repeated nudges.
-            </p>
-            
-            <div className="space-y-4">
-              {[["Control","Cohort default action"],["Treatment","FirstTrade recommended action"],["Primary metric","A2T through pre-order or MF order"],["Success events","pre_order_submitted · mf_order_submitted · first_trade"],["Guardrails","nudge_dismissed · opt_out · contact_frequency_exceeded"]].map(x => (
-                <div className="flex border-b border-border pb-3 last:border-0 text-sm" key={x[0]}>
-                  <span className="w-1/3 text-muted-foreground">{x[0]}</span>
-                  <b className="flex-1 font-semibold text-foreground">{x[1]}</b>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-6 bg-[#18794E]/10 text-[#18794E] border border-[#18794E]/20 p-3 rounded flex items-center justify-center gap-2 text-sm font-bold">
-              <Check size={16} /> Experiment ready
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-background border border-border rounded-lg p-6">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">EVENT TRAIL</div>
-          <h2 className="text-xl font-bold text-foreground mb-6">What will be recorded</h2>
-          
-          <div className="space-y-4">
-            {["decision_created", "nudge_previewed", "deep_link_opened", "pre_order_submitted", "mf_order_submitted", "a2t_achieved"].map((x, i) => (
-              <div className="flex items-center gap-4 bg-card border border-border p-3 rounded shadow-sm" key={x}>
-                <span className="w-6 h-6 rounded-full bg-background border border-border text-muted-foreground flex items-center justify-center text-xs font-bold">{i + 1}</span>
-                <b className="flex-1 text-foreground font-mono text-sm">{x}</b>
-                <span className="text-xs font-medium text-muted-foreground">Synthetic event schema</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const simulator = (
-    <div className="animate-in fade-in duration-200">
-      <SectionTitle title="Simulator" copy="Change account states and signals to see the policy respond in the same session." />
-      
-      <div className="bg-card border border-border rounded-lg shadow-sm mb-6 flex overflow-hidden">
-        <div className="w-1/2 p-6 border-r border-border bg-background flex flex-col">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">DEMO SCENARIO</span>
-          <div className="flex flex-wrap gap-2">
-            {simulatorScenarios.map(s => (
-              <button 
-                data-testid={`button-scenario-${s.replace(/\s+/g, '-')}`}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${scenario === s ? 'bg-foreground text-card border-foreground' : 'bg-card text-muted-foreground border-border hover:border-muted-foreground/50'}`} 
-                onClick={() => setScenario(s)} 
-                key={s}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="w-1/2 p-6 flex flex-col justify-center items-start">
-          <div className="text-xs font-bold text-primary uppercase tracking-wider mb-2">SELECTED RECOMMENDATION</div>
-          <h2 className="text-3xl font-bold text-foreground mb-3">{recommendation}</h2>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded font-bold text-sm">
-              {states.kra === false ? "Recovery only" : states.a2t ? "A2T achieved" : `${simScores[0].score} Action Fit Score`}
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground mb-4">
-            {states.kra === false ? "KRA was rejected. No score is calculated." : "Based on the highest eligible score under the current policy."}
-          </p>
-          <Button primary onClick={() => setStudio(true)} data-testid="button-open-studio-simulator">Open Nudge Studio <ArrowRight size={14} /></Button>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-lg shadow-sm">
-          <div className="p-4 border-b border-border flex justify-between items-center bg-background">
-            <h2 className="font-bold text-foreground">Account states</h2>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Editable</span>
-          </div>
-          <div className="p-4 space-y-1">
-            {Object.entries(states).map(([k, v]) => (
-              <label className="flex items-center justify-between p-2 hover:bg-background rounded cursor-pointer transition-colors" key={k}>
-                <span className="text-sm font-medium text-foreground">
-                  {k.replace("esign", "Post e-sign").replace("kra", "KRA approved").replace("ucc", "UCC Mapping").replace("mf", "MF Account").replace("exchange", "Exchange Approval").replace("a2t", "A2T achieved")}
-                </span>
-                <input 
-                  data-testid={`checkbox-state-${k}`}
-                  type="checkbox" 
-                  checked={v} 
-                  onChange={e => setStates({ ...states, [k]: e.target.checked })} 
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-        
-        <div className="bg-card border border-border rounded-lg shadow-sm">
-          <div className="p-4 border-b border-border flex justify-between items-center bg-background">
-            <h2 className="font-bold text-foreground">Signal categories</h2>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">0 to 1 normalized</span>
-          </div>
-          <div className="p-4 space-y-4">
-            {labels.map((l, i) => { 
-              const k = ["order", "watchlist", "mf", "segment", "funding"][i] as keyof Signals; 
-              return (
-                <label className="flex items-center gap-4" key={l}>
-                  <span className="w-1/3 text-sm font-medium text-foreground truncate">{l}</span>
-                  <input 
-                    data-testid={`slider-signal-${k}`}
-                    type="range" 
-                    min="0" max="1" step=".05" 
-                    value={signals[k]} 
-                    onChange={e => setSignals({ ...signals, [k]: Number(e.target.value) })} 
-                    className="flex-1 accent-primary cursor-pointer"
-                  />
-                  <b className="w-10 text-right text-sm font-semibold text-primary">{signals[k].toFixed(2)}</b>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+            );
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden selection:bg-primary/20">
@@ -526,24 +432,25 @@ export default function Home() {
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {nav.map(({ label, icon: Icon }) => (
-            <button 
-              key={label} 
-              data-testid={`nav-${label.replace(/\s+/g, '-')}`}
-              onClick={() => setArea(label)} 
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all ${area === label ? 'bg-background text-primary' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
+            <button
+              type="button"
+              key={label}
+              data-testid={`nav-${label.replace(/\s+/g, "-")}`}
+              onClick={() => setArea(label)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${area === label ? "bg-background text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
             >
-              <Icon size={16} className={area === label ? 'text-primary' : 'text-muted-foreground'} />
+              <Icon size={16} className={area === label ? "text-primary" : "text-muted-foreground"} />
               {label}
-              {label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">2.6k</span>}
+              {label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.filter((decision) => decision.selectedAction !== "No recommendation").length}</span>}
             </button>
           ))}
         </nav>
         <div className="p-4 border-t border-border text-xs font-medium text-muted-foreground space-y-2 bg-background/50">
-          <div className="flex items-center gap-2"><CircleAlert size={14} /> Policy v1.0</div>
+          <div className="flex items-center gap-2"><CircleAlert size={14} /> Policy v{livePolicy.version}</div>
           <div className="flex items-center gap-2"><UserRound size={14} /> PM workspace</div>
         </div>
       </aside>
-      
+
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-14 border-b border-border bg-card px-6 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -553,58 +460,314 @@ export default function Home() {
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-background border border-border px-2 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-[#18794E]" /> All systems synthetic
             </div>
-            <button className="text-muted-foreground hover:text-foreground transition-colors"><Bell size={18} /></button>
+            <button type="button" data-testid="button-notifications" aria-label="Notifications" className="text-muted-foreground hover:text-foreground transition-colors"><Bell size={18} /></button>
             <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground">AR</div>
           </div>
         </header>
-        
+
         <div className="flex-1 overflow-y-auto p-8 relative">
           <div className="max-w-5xl mx-auto space-y-6 pb-12">
-            {area === "Overview" ? overview : area === "Cohorts" ? cohorts : area === "Decisions" ? decisions : area === "Policy Studio" ? policy : area === "Measurement" ? measurement : simulator}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={area}
+                initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: -4 }}
+                transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+              >
+                {page}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </main>
-      
-      {studio && <NudgeStudio customer={selected} onClose={() => setStudio(false)} onApprove={() => { setPublished(true); setStudio(false); }} />}
+
+      <AnimatePresence>
+        {studioDecision && (
+          <NudgeStudio
+            key={`${studioDecision.customer.id}-${studioDecision.selectedAction}`}
+            decision={studioDecision}
+            initialCopy={copyOverrides[studioDecision.customer.id] ?? studioDecision.copyVariants[0] ?? "No customer-facing copy is available for this state."}
+            workflowStatus={workflowStatuses[studioDecision.customer.id] ?? "Draft"}
+            onClose={() => setStudioTarget(null)}
+            onSaveDraft={(copy) => saveNudgeDraft(studioDecision.customer.id, copy)}
+            onApprove={() => approveWorkflow(studioDecision.customer.id)}
+            reducedMotion={reducedMotion}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function DecisionTable({ onSelect }: { onSelect: (c: typeof customers[number]) => void }) {
+function OverviewPage({
+  decisions,
+  onOpenQueue,
+  onSelect,
+  reducedMotion,
+}: {
+  decisions: Decision[];
+  onOpenQueue: () => void;
+  onSelect: (id: string) => void;
+  reducedMotion: boolean;
+}) {
+  const priority = decisions.filter((decision) => decision.selectedAction !== "No recommendation").slice(0, 3);
+  return (
+    <>
+      <SectionTitle title="FirstTrade Decision Centre" copy="Turn account activation status and customer behaviour into the most relevant next action." />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          ["Customers requiring a next action", "2,667", "metric-1"],
+          ["A2T achieved through pre-order or MF order", "1,184", "metric-2"],
+          ["Cohort defaults overridden by FirstTrade", "318", "metric-3"],
+        ].map(([label, value, testId]) => (
+          <motion.div
+            key={label}
+            initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+            className="bg-card border border-border p-4 rounded-lg shadow-sm"
+          >
+            <div className="text-sm text-muted-foreground mb-1">{label}</div>
+            <div className="text-2xl font-bold text-foreground" data-testid={testId}>{value}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
+        <div className="p-4 border-b border-border flex justify-between items-end">
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">ACTIVATION FLOW</div>
+            <h2 className="text-lg font-bold text-foreground">Where customers pause</h2>
+          </div>
+          <span className="text-sm text-muted-foreground">Last 7 days · 8,412 accounts</span>
+        </div>
+        <div className="p-6 flex items-start justify-between relative overflow-hidden">
+          {["Post e-sign", "KRA", "UCC Mapping", "MF Account", "Exchange Approval", "A2T"].map((label, index) => (
+            <div className="flex flex-col flex-1 items-center relative z-10" key={label}>
+              <div className="text-xl font-bold text-foreground mb-2">{[8412, 7901, 6540, 4862, 3274, 1184][index].toLocaleString()}</div>
+              <div className="w-full px-2 mb-3">
+                <div className="h-2 bg-background border border-border rounded-full overflow-hidden">
+                  <motion.div
+                    initial={reducedMotion ? false : { width: 0 }}
+                    animate={{ width: `${100 - index * 12}%` }}
+                    transition={{ duration: reducedMotion ? 0 : 0.45, delay: reducedMotion ? 0 : index * 0.04, ease: "easeOut" }}
+                    className="h-full bg-primary rounded-full"
+                  />
+                </div>
+              </div>
+              <span className="text-xs font-medium text-muted-foreground text-center">{label}</span>
+            </div>
+          ))}
+          <div className="absolute top-[3.25rem] left-0 w-full flex justify-between px-[8%] pointer-events-none text-border">
+            {[1, 2, 3, 4, 5].map((index) => <ArrowRight key={index} size={16} />)}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
+        <div className="p-4 border-b border-border flex justify-between items-center bg-background">
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">QUEUE · 2,667 OPEN</div>
+            <h2 className="text-lg font-bold text-foreground">Priority Decisions</h2>
+          </div>
+          <Button onClick={onOpenQueue} testId="button-open-decision-queue">Open decision queue <ArrowRight size={14} /></Button>
+        </div>
+        <DecisionTable decisions={priority} onSelect={onSelect} />
+      </div>
+    </>
+  );
+}
+
+function CohortsPage({
+  onOpenCohort,
+  onRecovery,
+  reducedMotion,
+}: {
+  onOpenCohort: (cohort: string) => void;
+  onRecovery: () => void;
+  reducedMotion: boolean;
+}) {
+  return (
+    <>
+      <SectionTitle title="Cohorts" copy="Understand the externally pending step, then choose the safest customer action still available." />
+      <div className="space-y-4">
+        {stageData.map((stage, index) => (
+          <motion.div
+            key={stage.title}
+            initial={reducedMotion ? false : { opacity: 0, x: -12 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: reducedMotion ? 0 : 0.28, delay: reducedMotion ? 0 : index * 0.07, ease: "easeOut" }}
+            whileHover={reducedMotion ? undefined : { y: -2 }}
+            className="group bg-card border border-border rounded-lg shadow-sm p-5 flex gap-6 relative transition-shadow hover:shadow-md"
+          >
+            <div className="flex flex-col items-center">
+              <div className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground mb-2">{index + 1}</div>
+              {index !== stageData.length - 1 && (
+                <motion.div
+                  initial={reducedMotion ? false : { scaleY: 0 }}
+                  whileInView={{ scaleY: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: reducedMotion ? 0 : 0.45, ease: "easeOut" }}
+                  className="w-px bg-border flex-1 origin-top"
+                />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="flex justify-between items-start mb-4 gap-4">
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">STAGE {index + 1}</div>
+                  <h2 className="text-xl font-bold text-foreground flex items-center gap-3 flex-wrap">
+                    {stage.title}
+                    <Badge tone="slate">{stage.pending}</Badge>
+                  </h2>
+                </div>
+                <Button
+                  onClick={() => onOpenCohort(stage.cohort)}
+                  testId={`button-view-customers-${index}`}
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
+                >
+                  View customers <ArrowRight size={14} />
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-background border border-border rounded p-4 text-sm">
+                <div><div className="text-muted-foreground mb-1">Customer can still do</div><div className="font-semibold text-foreground">{stage.can}</div></div>
+                <div><div className="text-muted-foreground mb-1">Default cohort action</div><div className="font-semibold text-primary">{stage.picks[0]}</div></div>
+                <div><div className="text-muted-foreground mb-1">Customers here</div><div className="font-semibold text-foreground text-lg">{stage.count}</div></div>
+                <div>
+                  <div className="text-muted-foreground mb-2">Top selected actions</div>
+                  <div className="space-y-2">
+                    {stage.picks.map((pick, pickIndex) => (
+                      <div key={pick} className="flex justify-between items-center text-xs border-b border-border/50 pb-1 last:border-0 last:pb-0">
+                        <span className="font-medium text-foreground">{pick}</span><span className="text-muted-foreground">{[38, 24][pickIndex]}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+      <div className="mt-6 bg-destructive/5 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
+        <CircleAlert size={18} className="text-destructive shrink-0 mt-0.5" />
+        <div className="flex-1 text-destructive">
+          <b className="block mb-1">KRA / KYC rejected is recovery-only</b>
+          <p className="text-sm opacity-90">FirstTrade does not score or recommend trading actions here. The only eligible path is Complete Re-KYC / Re-KRA.</p>
+        </div>
+        <Button onClick={onRecovery} testId="button-view-recovery-cohort">View recovery cohort</Button>
+      </div>
+    </>
+  );
+}
+
+function DecisionsPage({
+  decisions,
+  selected,
+  selectedId,
+  search,
+  cohortFilter,
+  expanded,
+  onSearch,
+  onClearFilter,
+  onSelect,
+  onToggleExpanded,
+  onStudio,
+  reducedMotion,
+}: {
+  decisions: Decision[];
+  selected: Decision;
+  selectedId: string;
+  search: string;
+  cohortFilter: string | null;
+  expanded: boolean;
+  onSearch: (value: string) => void;
+  onClearFilter: () => void;
+  onSelect: (id: string) => void;
+  onToggleExpanded: () => void;
+  onStudio: (decision: Decision) => void;
+  reducedMotion: boolean;
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <SectionTitle title="Decisions" copy="A deterministic queue for deciding the next activation action, with customer-safe reasoning." />
+      {cohortFilter && (
+        <div className="mb-4 flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Visible cohort filter:</span>
+          <Badge>{cohortFilter}</Badge>
+          <button type="button" data-testid="button-clear-cohort-filter" onClick={onClearFilter} className="text-primary font-semibold hover:underline">Clear</button>
+        </div>
+      )}
+      <div className="flex gap-6 flex-1 min-h-0">
+        <div className="w-80 bg-card border border-border rounded-lg shadow-sm flex flex-col shrink-0 overflow-hidden">
+          <div className="p-3 border-b border-border flex items-center gap-2 bg-background">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2.5 top-2 text-muted-foreground" />
+              <input data-testid="input-search-customers" aria-label="Search customer or cohort" className="w-full bg-card border border-border rounded text-sm py-1.5 pl-8 pr-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search customer or cohort" />
+            </div>
+            <button type="button" data-testid="button-filter-decisions" aria-label="Decision filters" className="p-1.5 text-muted-foreground hover:bg-border/50 rounded transition-colors"><SlidersHorizontal size={16} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {decisions.map((decision) => (
+              <button
+                type="button"
+                data-testid={`button-queue-item-${decision.customer.id}`}
+                className={`w-full text-left p-3 border-b border-border flex items-center gap-3 transition-colors ${selectedId === decision.customer.id ? "bg-background border-l-2 border-l-primary" : "hover:bg-background border-l-2 border-l-transparent"}`}
+                onClick={() => onSelect(decision.customer.id)}
+                key={decision.customer.id}
+              >
+                <div className="w-8 h-8 rounded-full bg-border flex items-center justify-center text-xs font-bold text-foreground shrink-0">{decision.customer.initials}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm text-foreground truncate">{decision.customer.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{decision.cohort} · {decision.stateLabel}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-lg font-bold text-foreground leading-none">{decision.selectedScore ?? "—"}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-0.5">{decision.selectedScore === null ? "safe" : "fit"}</div>
+                </div>
+              </button>
+            ))}
+            {decisions.length === 0 && <div className="p-4 text-center text-sm text-muted-foreground">No customers found.</div>}
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={selected.customer.id}
+              initial={reducedMotion ? false : { opacity: 0, x: 18 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reducedMotion ? undefined : { opacity: 0, x: -8 }}
+              transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+              className="h-full"
+            >
+              <Detail decision={selected} expanded={expanded} onToggleExpanded={onToggleExpanded} onStudio={() => onStudio(selected)} reducedMotion={reducedMotion} />
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DecisionTable({ decisions, onSelect }: { decisions: Decision[]; onSelect: (id: string) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left whitespace-nowrap">
         <thead className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-wider">
-          <tr>
-            <th className="px-4 py-3 font-semibold">Customer</th>
-            <th className="px-4 py-3 font-semibold">Cohort</th>
-            <th className="px-4 py-3 font-semibold">Recommended next action</th>
-            <th className="px-4 py-3 font-semibold">Why</th>
-            <th className="px-4 py-3 font-semibold">Channel</th>
-            <th className="px-4 py-3 font-semibold">Policy</th>
-            <th className="px-4 py-3 font-semibold"></th>
-          </tr>
+          <tr>{["Customer", "Cohort", "Recommended next action", "Why", "Channel", "Policy", ""].map((heading) => <th className="px-4 py-3 font-semibold" key={heading}>{heading}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {customers.slice(0, 3).map(c => (
-            <tr key={c.id} className="hover:bg-background/50 transition-colors">
-              <td className="px-4 py-3">
-                <div className="font-bold text-foreground">{c.name}</div>
-                <div className="text-xs font-medium text-muted-foreground mt-0.5">{c.id}</div>
-              </td>
-              <td className="px-4 py-3 text-foreground font-medium">{c.cohort}</td>
-              <td className="px-4 py-3"><Badge>{c.action}</Badge></td>
-              <td className="px-4 py-3 text-muted-foreground whitespace-normal min-w-[200px] text-sm leading-snug">{c.why}</td>
-              <td className="px-4 py-3 text-foreground font-medium">{c.channel}</td>
-              <td className="px-4 py-3 text-muted-foreground font-medium">{c.policy}</td>
+          {decisions.map((decision) => (
+            <tr key={decision.customer.id} className="hover:bg-background/50 transition-colors">
+              <td className="px-4 py-3"><div className="font-bold text-foreground">{decision.customer.name}</div><div className="text-xs font-medium text-muted-foreground mt-0.5">{decision.customer.id}</div></td>
+              <td className="px-4 py-3 text-foreground font-medium">{decision.cohort}</td>
+              <td className="px-4 py-3"><Badge tone={actionTone(decision.selectedAction)}>{decision.selectedAction}</Badge></td>
+              <td className="px-4 py-3 text-muted-foreground whitespace-normal min-w-[220px] text-sm leading-snug">{decision.rationale}</td>
+              <td className="px-4 py-3 text-foreground font-medium">{decision.channelPlan.primary}</td>
+              <td className="px-4 py-3 text-muted-foreground font-medium">v{decision.policyVersion}</td>
               <td className="px-4 py-3 text-right">
-                <button 
-                  data-testid={`link-view-decision-${c.id}`}
-                  className="inline-flex items-center gap-1 text-primary font-semibold hover:underline" 
-                  onClick={() => onSelect(c)}
-                >
-                  View decision <ChevronRight size={14} />
-                </button>
+                <button type="button" data-testid={`link-view-decision-${decision.customer.id}`} className="inline-flex items-center gap-1 text-primary font-semibold hover:underline" onClick={() => onSelect(decision.customer.id)}>View decision <ChevronRight size={14} /></button>
               </td>
             </tr>
           ))}
@@ -614,180 +777,502 @@ function DecisionTable({ onSelect }: { onSelect: (c: typeof customers[number]) =
   );
 }
 
-function Detail({ customer, expanded, setExpanded, onStudio }: { customer: typeof customers[number]; expanded: boolean; setExpanded: (x: boolean) => void; onStudio: () => void }) { 
+function Detail({
+  decision,
+  expanded,
+  onToggleExpanded,
+  onStudio,
+  reducedMotion,
+}: {
+  decision: Decision;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onStudio: () => void;
+  reducedMotion: boolean;
+}) {
+  const weightedSignals = decision.scoreBreakdown.reduce((total, item) => total + item.contribution, 0);
+  const canOpenStudio = decision.selectedAction !== "No recommendation" && decision.selectedAction !== "Resume account";
   return (
     <div className="bg-card border border-border rounded-lg shadow-sm h-full flex flex-col">
-      <div className="p-6 border-b border-border flex justify-between items-start bg-background">
+      <div className="p-6 border-b border-border flex justify-between items-start bg-background gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-card border border-border flex items-center justify-center text-lg font-bold text-foreground shadow-sm">{customer.initials}</div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground leading-tight">{customer.name}</h2>
-            <p className="text-sm font-medium text-muted-foreground mt-1">{customer.id} · {customer.cohort} · {customer.state}</p>
-          </div>
+          <div className="w-12 h-12 rounded-full bg-card border border-border flex items-center justify-center text-lg font-bold text-foreground shadow-sm">{decision.customer.initials}</div>
+          <div><h2 className="text-xl font-bold text-foreground leading-tight">{decision.customer.name}</h2><p className="text-sm font-medium text-muted-foreground mt-1">{decision.customer.id} · {decision.cohort} · {decision.stateLabel}</p></div>
         </div>
-        <Button onClick={onStudio} data-testid="button-open-nudge-studio"><Sparkles size={14} className="text-primary" /> Open Nudge Studio</Button>
+        <Button disabled={!canOpenStudio} onClick={onStudio} testId="button-open-nudge-studio"><Sparkles size={14} className="text-primary" /> Open Nudge Studio</Button>
       </div>
-      
+
       <div className="p-6 border-b border-border bg-card">
         <div className="text-xs font-bold text-primary uppercase tracking-wider mb-2">RECOMMENDED NEXT ACTION</div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">{customer.action}</h1>
-        <p className="text-muted-foreground font-medium">{customer.why}</p>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.h1 key={decision.selectedAction} initial={reducedMotion ? false : { opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -5 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="text-3xl font-bold text-foreground mb-2">{decision.selectedAction}</motion.h1>
+        </AnimatePresence>
+        <p className="text-muted-foreground font-medium">{decision.rationale}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Badge tone={actionTone(decision.selectedAction)}>{decision.selectedScore === null ? "No score calculated" : `${decision.selectedScore} Action Fit Score`}</Badge>
+          {decision.a2tStatus !== "Not achieved" && <Badge tone="green">{decision.a2tStatus}</Badge>}
+        </div>
       </div>
-      
-      <div className="grid grid-cols-2 gap-8 p-6 flex-1 min-h-0 overflow-y-auto">
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-6 flex-1 min-h-0 overflow-y-auto">
         <div>
           <h3 className="font-bold text-foreground mb-5">Decision rationale</h3>
           <div className="relative pl-5 space-y-5 before:content-[''] before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-border">
-            <div className="relative text-sm">
-              <span className="absolute left-[-24px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-card" />
-              <p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Today · 10:42</b>Decision created from latest account state</p>
-            </div>
-            <div className="relative text-sm">
-              <span className="absolute left-[-23px] top-1.5 w-2 h-2 rounded-full bg-border" />
-              <p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Yesterday · 18:20</b>Instrument selected in research</p>
-            </div>
-            <div className="relative text-sm">
-              <span className="absolute left-[-23px] top-1.5 w-2 h-2 rounded-full bg-border" />
-              <p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">03 Feb · 09:12</b>Post e-sign completed</p>
-            </div>
+            <div className="relative text-sm"><span className="absolute left-[-24px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-card" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Current state</b>{decision.stateLabel} · {decision.accountState.uccStatus} UCC · {decision.accountState.kraStatus} KRA</p></div>
+            <div className="relative text-sm"><span className="absolute left-[-23px] top-1.5 w-2 h-2 rounded-full bg-border" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Completed actions</b>{decision.completedActions.length ? decision.completedActions.join(" · ") : "None recorded"}</p></div>
+            <div className="relative text-sm"><span className="absolute left-[-23px] top-1.5 w-2 h-2 rounded-full bg-border" /><p className="text-foreground leading-relaxed"><b className="font-semibold text-muted-foreground block mb-0.5">Customer-owned context</b>{decision.customerOwnedDeepLinkContext}</p></div>
           </div>
-          
           <div className="mt-8 bg-background border border-border rounded-lg p-4 text-sm">
-            <div className="text-muted-foreground font-medium mb-1">Default action</div>
-            <div className="font-bold text-foreground mb-4">Create Pre-order</div>
+            <div className="text-muted-foreground font-medium mb-1">Default cohort action</div>
+            <div className="font-bold text-foreground mb-4">{decision.cohortDefault}</div>
             <div className="text-muted-foreground font-medium mb-1">Retained / replaced</div>
-            <div className="font-bold text-primary">Replaced by Add Funds because funding flow is already in progress.</div>
+            <div className="font-bold text-primary">{decision.replacementRationale}</div>
           </div>
         </div>
-        
+
         <div>
-          <h3 className="font-bold text-foreground mb-1 flex items-baseline gap-2">
-            Action Fit Score <strong className="text-2xl text-primary">{customer.score}</strong>
-          </h3>
-          <p className="text-sm font-medium text-muted-foreground mb-6">Supporting evidence under Policy v1.0</p>
-          
-          <div className="space-y-4 mb-5">
-            {labels.map((x, i) => (
-              <div key={x} className="flex items-center gap-3 text-sm">
-                <span className="w-1/3 text-muted-foreground font-medium truncate">{x}</span>
-                <div className="flex-1 h-2 bg-background border border-border rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full" style={{ width: `${[70, 80, 40, 30, 80][i]}%` }} />
+          <h3 className="font-bold text-foreground mb-1 flex items-baseline gap-2">Action Fit Score <TooltipHint label="Score definition" text="A deterministic fit score from account state and five normalized intent signals. Completed actions are removed before selection." /> <strong className="text-2xl text-primary">{decision.selectedScore ?? "—"}</strong></h3>
+          <p className="text-sm font-medium text-muted-foreground mb-6">Supporting evidence under Policy v{decision.policyVersion}</p>
+          <div className="space-y-3 mb-5">
+            {decision.scoreBreakdown.length === 0
+              ? <div className="bg-background border border-border rounded-lg p-4 text-sm text-muted-foreground">KRA / KYC rejection is recovery-only. No product score is calculated.</div>
+              : decision.scoreBreakdown.map((item, index) => (
+                <div className="flex items-center gap-3 text-sm" key={item.key}>
+                  <span className="w-1/3 text-muted-foreground font-medium truncate">{item.label}</span>
+                  <div className="flex-1 h-2 bg-background border border-border rounded-full overflow-hidden">
+                    <motion.div initial={expanded && !reducedMotion ? { width: 0 } : false} animate={{ width: `${item.value * 100}%` }} transition={{ duration: reducedMotion ? 0 : 0.28, delay: reducedMotion ? 0 : index * 0.035, ease: "easeOut" }} className="h-full bg-primary rounded-full" />
+                  </div>
+                  <b className="w-8 text-right text-foreground font-bold">{item.value.toFixed(2)}</b>
                 </div>
-                <b className="w-8 text-right text-foreground font-bold">{[.7, .8, .4, .3, .8][i].toFixed(2)}</b>
-              </div>
-            ))}
+              ))}
           </div>
-          
-          <button 
-            data-testid="button-toggle-calculation"
-            className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors uppercase tracking-wider" 
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? "Hide score calculation" : "Show score calculation"} 
-            <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+          <button type="button" data-testid="button-toggle-calculation" className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors uppercase tracking-wider" onClick={onToggleExpanded}>
+            {expanded ? "Hide score calculation" : "Show score calculation"} <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
           </button>
-          
-          {expanded && (
-            <div className="mt-4 text-sm bg-primary/5 text-primary p-4 rounded-lg border border-primary/20 leading-relaxed font-medium">
-              Base 20 + weighted signals 56 = <b>76</b>. Completed actions removed before selection; threshold is 60.
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {expanded && (
+              <motion.div initial={reducedMotion ? false : { height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={reducedMotion ? undefined : { height: 0, opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }} className="overflow-hidden">
+                <div className="mt-4 text-sm bg-primary/5 text-primary p-4 rounded-lg border border-primary/20 leading-relaxed font-medium">
+                  {decision.selectedScore === null ? "No score is calculated for this state." : `Base 20 + weighted signals ${weightedSignals} = ${decision.selectedScore}. Completed actions are removed before selection; threshold is ${decision.selectionThreshold}.`}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
-      
-      <div className="p-5 border-t border-border bg-background flex items-center justify-between">
-        <div>
+
+      <div className="p-5 border-t border-border bg-background flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <h3 className="font-bold text-foreground text-sm mb-1">Customer-safe nudge preview</h3>
-          <p className="text-sm text-foreground italic my-1 font-medium">“Your account is ready for the next step. Add funds to continue when you’re ready.”</p>
-          <span className="text-xs font-medium text-muted-foreground">In-app · next active session · suppress after 2 ignored pushes</span>
+          <p className="text-sm text-foreground italic my-1 font-medium truncate">{decision.copyVariants[0] ?? "No nudge is sent for this state."}</p>
+          <span className="text-xs font-medium text-muted-foreground">{decision.channelPlan.primary} · {decision.channelPlan.inApp} · {decision.suppressionRules[2]}</span>
         </div>
-        <Button onClick={onStudio} data-testid="button-edit-workflow-bottom">Edit workflow <ArrowRight size={14} /></Button>
+        <Button disabled={!canOpenStudio} onClick={onStudio} testId="button-edit-workflow-bottom">Edit workflow <ArrowRight size={14} /></Button>
       </div>
     </div>
   );
 }
 
-function NudgeStudio({ customer, onClose, onApprove }: { customer: typeof customers[number]; onClose: () => void; onApprove: () => void }) { 
-  const [copy, setCopy] = useState("Your account is ready for the next step. Add funds to continue when you’re ready."); 
+function PolicyStudioPage({
+  livePolicy,
+  draftPolicy,
+  dirty,
+  valid,
+  preview,
+  notice,
+  onThreshold,
+  onWeight,
+  onPreview,
+  onPublish,
+  reducedMotion,
+}: {
+  livePolicy: Policy;
+  draftPolicy: Policy;
+  dirty: boolean;
+  valid: boolean;
+  preview: PolicyPreview | null;
+  notice: string;
+  onThreshold: (value: number) => void;
+  onWeight: (action: Action, key: SignalKey, value: number) => void;
+  onPreview: () => void;
+  onPublish: () => void;
+  reducedMotion: boolean;
+}) {
   return (
-    <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-      <div className="bg-card rounded-xl shadow-2xl border border-border w-full max-w-4xl max-h-full flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div>
+      <SectionTitle title="Policy Studio" copy="Shape the decision policy locally, preview its impact, and publish a simulated version." />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="bg-card border border-border rounded-lg shadow-sm p-6 flex flex-col gap-6">
+          <div className="flex justify-between items-start border-b border-border pb-4 gap-4">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">DRAFT POLICY</div>
+              <h2 className="text-xl font-bold text-foreground">Version {draftPolicy.version} · {dirty ? "Unsaved changes" : "Ready to preview"}</h2>
+            </div>
+            <Badge tone="green">Current live · v{livePolicy.version}</Badge>
+          </div>
+          <label className="flex items-center justify-between text-sm font-semibold text-foreground">
+            Selection threshold
+            <input data-testid="input-threshold" aria-label="Selection threshold" className="w-16 bg-background border border-border rounded px-2 py-1 text-center font-normal focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" type="number" min={0} max={100} value={draftPolicy.threshold} onChange={(event) => onThreshold(Number(event.target.value))} />
+          </label>
+
+          <div className="space-y-4">
+            {ACTIONS.map((action) => {
+              const total = policyWeightTotal(draftPolicy, action);
+              return (
+                <div className="text-sm" key={action}>
+                  <div className="flex items-center justify-between mb-2">
+                    <b className="text-foreground">{action}</b>
+                    <span className={total === 80 ? "text-[#18794E] text-xs font-semibold" : "text-destructive text-xs font-semibold"}>{total}/80 weight points</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {SIGNAL_KEYS.map((key) => (
+                      <label key={key} className="flex-1 flex flex-col gap-1 text-[10px] font-semibold text-muted-foreground uppercase text-center">
+                        <span className="truncate" title={SIGNAL_LABELS[key]}>{SIGNAL_LABELS[key].split(" ")[0]}</span>
+                        <input data-testid={`input-weight-${action}-${key}`} aria-label={`${action} ${SIGNAL_LABELS[key]} weight`} value={draftPolicy.weights[action][key]} type="number" min={0} className="w-full bg-background border border-border rounded px-1 py-1 text-center font-normal text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" onChange={(event) => onWeight(action, key, Number(event.target.value))} />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-3">
+            <div className="text-sm font-semibold text-foreground">Shared delivery policy <TooltipHint label="Compliance note" text="Delivery is synthetic preview logic only. Suppress after completion, opt-out, or two ignored pushes in seven days." /></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="bg-background border border-border rounded p-3"><b>In-app</b><span className="block text-muted-foreground mt-1">{draftPolicy.channelPlan.inApp}</span></div>
+              <div className="bg-background border border-border rounded p-3"><b>Push</b><span className="block text-muted-foreground mt-1">{draftPolicy.channelPlan.push}</span></div>
+              <div className="bg-background border border-border rounded p-3"><b>WhatsApp</b><span className="block text-muted-foreground mt-1">{draftPolicy.channelPlan.whatsapp}</span></div>
+            </div>
+            {!valid && <div className="text-sm text-destructive flex items-center gap-2"><CircleAlert size={15} /> Each action must total exactly 80 weight points and the threshold must be between 0 and 100.</div>}
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-border">
+            <Button disabled={!valid} onClick={onPreview} testId="button-preview-customers">Preview affected customers</Button>
+            <Button primary disabled={!valid || !dirty} onClick={onPublish} testId="button-publish-policy">Publish simulated version</Button>
+          </div>
+          <AnimatePresence>
+            {notice && <motion.div initial={reducedMotion ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0 }} className="bg-[#18794E]/10 text-[#18794E] border border-[#18794E]/20 p-3 rounded flex items-center gap-2 text-sm font-medium"><Check size={16} /> Draft v1.1 → {notice}</motion.div>}
+          </AnimatePresence>
+        </div>
+
+        <div className="bg-background border border-border rounded-lg p-6 flex flex-col gap-6">
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">CHANGE REVIEW</div>
+            <h2 className="text-lg font-bold text-foreground">Before / after recommendations</h2>
+            <p className="text-sm text-muted-foreground mt-1">{preview ? `${preview.changed.length} changed customers across ${preview.evaluatedCount} synthetic decisions.` : "Preview the draft to recalculate recommendations."}</p>
+          </div>
+          <div className="space-y-3 flex-1">
+            {preview?.changed.length
+              ? preview.changed.map((change) => (
+                <motion.div key={change.id} initial={reducedMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="bg-card border border-border p-3 rounded text-sm flex items-center justify-between gap-3 shadow-sm">
+                  <span className="font-semibold text-foreground min-w-0 truncate">{change.name}</span>
+                  <b className="text-muted-foreground font-medium text-right">{change.before}</b>
+                  <ArrowRight size={14} className="text-border shrink-0" />
+                  <b className={`text-right ${change.after === "No recommendation" || change.after === "Resume account" ? "text-muted-foreground" : "text-primary"}`}>{change.after}</b>
+                </motion.div>
+              ))
+              : <div className="bg-card border border-border rounded p-4 text-sm text-muted-foreground">{preview ? "No selected recommendations changed under this draft." : "No preview calculated yet."}</div>}
+          </div>
+          <div className="border-t border-border pt-4">
+            <h3 className="font-bold text-foreground mb-3 text-sm">Version history</h3>
+            <div className="space-y-2 text-sm">
+              <p className="flex justify-between text-foreground"><b className="font-semibold">v{livePolicy.version}</b><span className="text-muted-foreground">Live simulated</span></p>
+              <p className="flex justify-between text-muted-foreground opacity-75"><b className="font-semibold">v0.9</b><span>Archived</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeasurementPage({ decision, reducedMotion }: { decision: Decision; reducedMotion: boolean }) {
+  const events = ["decision_created", "nudge_previewed", "deep_link_opened", "pre_order_submitted", "mf_order_submitted", "first_trade_placed", "a2t_achieved"];
+  return (
+    <div>
+      <SectionTitle title="Measurement" copy="Instrument the activation decision without pretending the outcome is already known." />
+      <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+        <Badge>Selected treatment action · {decision.selectedAction}</Badge>
+        <span className="text-muted-foreground">Decision {decision.customer.id} · Policy v{decision.policyVersion}</span>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+          <div className="text-xs font-bold text-primary uppercase tracking-wider mb-1">EXPERIMENT BRIEF</div>
+          <h2 className="text-2xl font-bold text-foreground mb-3">Hypothesis</h2>
+          <p className="text-foreground text-lg font-medium leading-relaxed mb-8">If FirstTrade selects a customer-safe next action from account state and behaviour, more customers will reach A2T without increasing unwanted contact or repeated nudges.</p>
+          <div className="space-y-4">
+            {[
+              ["Control", "Existing static cohort journey including completed-action suppression"],
+              ["Treatment", `Existing journey plus ${decision.selectedAction}`],
+              ["Primary metric", "A2T success within seven days of e-sign"],
+              ["Success events", "Pre-order submitted, MF order submitted, or first trade placed"],
+              ["Guardrails", "Nudge dismissed · opt-out · contact frequency exceeded"],
+            ].map(([label, value]) => <div className="flex border-b border-border pb-3 last:border-0 text-sm" key={label}><span className="w-1/3 text-muted-foreground">{label}</span><b className="flex-1 font-semibold text-foreground">{value}</b></div>)}
+          </div>
+          <div className="mt-6 bg-[#18794E]/10 text-[#18794E] border border-[#18794E]/20 p-3 rounded flex items-center justify-center gap-2 text-sm font-bold"><Check size={16} /> Experiment ready</div>
+        </div>
+
+        <div className="bg-background border border-border rounded-lg p-6">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">JOURNEY ALIGNMENT</div>
+          <h2 className="text-xl font-bold text-foreground mb-5">Same A2T outcome, different treatment</h2>
+          <div className="space-y-4 mb-8">
+            {["Control · cohort default", "Treatment · FirstTrade action"].map((label, index) => (
+              <div key={label}>
+                <div className="flex items-center justify-between text-sm mb-2"><span className="font-semibold text-foreground">{label}</span><span className="text-muted-foreground">A2T</span></div>
+                <div className="h-2 rounded-full bg-card border border-border overflow-hidden"><motion.div initial={reducedMotion ? false : { width: 0 }} animate={{ width: "100%" }} transition={{ duration: reducedMotion ? 0 : 0.45, delay: reducedMotion ? 0 : index * 0.1, ease: "easeOut" }} className={`h-full ${index === 0 ? "bg-muted-foreground/50" : "bg-primary"}`} /></div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">EVENT TRAIL</div>
+          <h2 className="text-xl font-bold text-foreground mb-6">What will be recorded</h2>
+          <div className="space-y-4">
+            {events.map((event, index) => (
+              <motion.div key={event} initial={reducedMotion ? false : { opacity: 0, y: 6 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: reducedMotion ? 0 : 0.2, delay: reducedMotion ? 0 : index * 0.04, ease: "easeOut" }} className="flex items-center gap-4 bg-card border border-border p-3 rounded shadow-sm">
+                <span className="w-6 h-6 rounded-full bg-background border border-border text-muted-foreground flex items-center justify-center text-xs font-bold">{index + 1}</span>
+                <b className="flex-1 text-foreground font-mono text-sm">{event}</b>
+                <span className="text-xs font-medium text-muted-foreground">Synthetic event schema</span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SimulatorPage({
+  scenario,
+  state,
+  decision,
+  changedField,
+  changedScoreActions,
+  recommendationNotice,
+  calculationOpen,
+  onScenario,
+  onChange,
+  onOpenStudio,
+  onToggleCalculation,
+  reducedMotion,
+}: {
+  scenario: SimulatorScenario | "Manual controls";
+  state: SimulatorState;
+  decision: Decision;
+  changedField: SimulatorField | null;
+  changedScoreActions: Action[];
+  recommendationNotice: string;
+  calculationOpen: boolean;
+  onScenario: (scenario: SimulatorScenario) => void;
+  onChange: <K extends keyof SimulatorState>(field: K, value: SimulatorState[K]) => void;
+  onOpenStudio: () => void;
+  onToggleCalculation: () => void;
+  reducedMotion: boolean;
+}) {
+  const controlClass = (field: SimulatorField) => `w-full bg-card border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all ${changedField === field ? "ring-2 ring-primary/30 bg-primary/5" : ""}`;
+  const selectValue = (field: keyof SimulatorState) => String(state[field]);
+  const selectChange = <K extends keyof SimulatorState>(field: K, value: string) => onChange(field, value as SimulatorState[K]);
+  return (
+    <div>
+      <SectionTitle title="Simulator" copy="Change product states and customer-owned context to see the policy respond in the same session." />
+      <div className="bg-card border border-border rounded-lg shadow-sm mb-6 flex flex-col lg:flex-row overflow-hidden">
+        <div className="lg:w-1/2 p-6 border-r border-border bg-background flex flex-col">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">DEMO SCENARIO</span>
+          <div className="flex flex-wrap gap-2">
+            {SIMULATOR_SCENARIOS.map((preset) => (
+              <button type="button" data-testid={`button-scenario-${preset.replace(/\s+/g, "-")}`} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 border ${scenario === preset ? "bg-foreground text-card border-foreground" : "bg-card text-muted-foreground border-border hover:border-muted-foreground/50"}`} onClick={() => onScenario(preset)} key={preset}>{preset}</button>
+            ))}
+          </div>
+          {scenario === "Manual controls" && <div className="mt-4 text-xs text-primary font-semibold">Manual product-state controls active</div>}
+        </div>
+        <div className="lg:w-1/2 p-6 flex flex-col justify-center items-start">
+          <div className="text-xs font-bold text-primary uppercase tracking-wider mb-2">SELECTED RECOMMENDATION</div>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.h2 key={decision.selectedAction} initial={reducedMotion ? false : { opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -5 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="text-3xl font-bold text-foreground mb-3">{decision.selectedAction}</motion.h2>
+          </AnimatePresence>
+          <div className="flex items-center gap-3 mb-2"><Badge tone={actionTone(decision.selectedAction)}>{decision.selectedScore === null ? (decision.a2tStatus !== "Not achieved" ? "A2T achieved" : decision.selectedAction === RECOVERY_ACTION ? "Recovery only" : "No score") : `${decision.selectedScore} Action Fit Score`}</Badge></div>
+          <p className="text-sm text-muted-foreground mb-4">{decision.rationale}</p>
+          <div className="flex items-center gap-3">
+            <Button primary disabled={decision.selectedAction === "No recommendation" || decision.selectedAction === "Resume account"} onClick={onOpenStudio} testId="button-open-studio-simulator">Open Nudge Studio <ArrowRight size={14} /></Button>
+            <AnimatePresence>
+              {recommendationNotice && <motion.span initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} className="text-xs font-semibold text-primary">{recommendationNotice}</motion.span>}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-border rounded-lg shadow-sm">
+          <div className="p-4 border-b border-border flex justify-between items-center bg-background"><h2 className="font-bold text-foreground">Product-state controls</h2><span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Editable</span></div>
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "kraStatus" ? "text-primary" : ""}`}>KRA status<select data-testid="select-kra-status" className={controlClass("kraStatus")} value={state.kraStatus} onChange={(event) => selectChange("kraStatus", event.target.value)}><option>Approved</option><option>Pending</option><option>Rejected</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "uccStatus" ? "text-primary" : ""}`}>UCC mapping<select data-testid="select-ucc-status" className={controlClass("uccStatus")} value={state.uccStatus} onChange={(event) => selectChange("uccStatus", event.target.value)}><option>Complete</option><option>Pending</option><option>Not started</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "mfAccountStatus" ? "text-primary" : ""}`}>MF account<select data-testid="select-mf-account" className={controlClass("mfAccountStatus")} value={state.mfAccountStatus} onChange={(event) => selectChange("mfAccountStatus", event.target.value)}><option>Not started</option><option>Active</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "exchangeStatus" ? "text-primary" : ""}`}>Exchange approval<select data-testid="select-exchange-status" className={controlClass("exchangeStatus")} value={state.exchangeStatus} onChange={(event) => selectChange("exchangeStatus", event.target.value)}><option>Not approved</option><option>Approved</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "fundingStatus" ? "text-primary" : ""}`}>Funding flow<select data-testid="select-funding-status" className={controlClass("fundingStatus")} value={state.fundingStatus} onChange={(event) => selectChange("fundingStatus", event.target.value)}><option>Not started</option><option>In progress</option><option>Ready</option><option>Complete</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "selectedInstrument" ? "text-primary" : ""}`}>Selected instrument<select data-testid="select-selected-instrument" className={controlClass("selectedInstrument")} value={state.selectedInstrument} onChange={(event) => selectChange("selectedInstrument", event.target.value)}><option>None</option><option>NIFTY 50 ETF</option><option>NIFTY 50</option><option>Balanced Advantage Fund</option><option>F&O segment</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "preOrderStatus" ? "text-primary" : ""}`}>Pre-order<select data-testid="select-pre-order-status" className={controlClass("preOrderStatus")} value={state.preOrderStatus} onChange={(event) => selectChange("preOrderStatus", event.target.value)}><option>Not started</option><option>Started</option><option>Submitted</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "mfOrderStatus" ? "text-primary" : ""}`}>MF order<select data-testid="select-mf-order-status" className={controlClass("mfOrderStatus")} value={state.mfOrderStatus} onChange={(event) => selectChange("mfOrderStatus", event.target.value)}><option>Not submitted</option><option>Submitted</option></select></label>
+            <label className={`text-sm font-medium text-foreground transition-colors ${changedField === "a2tStatus" ? "text-primary" : ""}`}>A2T outcome<select data-testid="select-a2t-status" className={controlClass("a2tStatus")} value={state.a2tStatus} onChange={(event) => selectChange("a2tStatus", event.target.value)}><option>Not achieved</option><option>Achieved through pre-order</option><option>Achieved through MF order</option><option>Achieved through first trade</option></select></label>
+            <label className={`md:col-span-2 flex items-center justify-between gap-3 p-3 rounded border border-border text-sm font-medium text-foreground transition-colors ${changedField === "savedWatchlist" ? "ring-2 ring-primary/30 bg-primary/5" : "bg-background"}`}><span>Saved watchlist context</span><input data-testid="checkbox-saved-watchlist" type="checkbox" checked={state.savedWatchlist} onChange={(event) => onChange("savedWatchlist", event.target.checked)} className="w-4 h-4 accent-primary" /></label>
+            <label className={`md:col-span-2 flex items-center justify-between gap-3 p-3 rounded border border-border text-sm font-medium text-foreground transition-colors ${changedField === "sipCalculatorUsed" ? "ring-2 ring-primary/30 bg-primary/5" : "bg-background"}`}><span>SIP calculator activity</span><input data-testid="checkbox-sip-calculator" type="checkbox" checked={state.sipCalculatorUsed} onChange={(event) => onChange("sipCalculatorUsed", event.target.checked)} className="w-4 h-4 accent-primary" /></label>
+            <label className={`md:col-span-2 flex items-center justify-between gap-3 p-3 rounded border border-border text-sm font-medium text-foreground transition-colors ${changedField === "segmentInterest" ? "ring-2 ring-primary/30 bg-primary/5" : "bg-background"}`}><span>F&O / commodity segment interest</span><input data-testid="checkbox-segment-interest" type="checkbox" checked={state.segmentInterest} onChange={(event) => onChange("segmentInterest", event.target.checked)} className="w-4 h-4 accent-primary" /></label>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-lg shadow-sm">
+          <div className="p-4 border-b border-border flex justify-between items-center bg-background"><h2 className="font-bold text-foreground">Candidate actions</h2><span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Changed scores only</span></div>
+          <div className="p-4 space-y-2">
+            {ACTIONS.map((action) => {
+              const score = decision.candidateScores[action];
+              const changed = changedScoreActions.includes(action);
+              return (
+                <motion.div key={action} animate={changed && !reducedMotion ? { backgroundColor: ["rgba(23,105,224,0.08)", "rgba(23,105,224,0)"] } : undefined} transition={{ duration: reducedMotion ? 0 : 0.45, ease: "easeOut" }} className={`flex items-center justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0 px-2 py-1 rounded ${decision.selectedAction === action ? "bg-primary/5" : ""}`}>
+                  <span className={`text-sm font-medium ${decision.selectedAction === action ? "text-primary" : "text-foreground"}`}>{action}</span>
+                  <span className={score === null ? "text-xs text-muted-foreground" : "text-sm font-bold text-foreground"}>{score === null ? "Suppressed" : `${score} fit`}</span>
+                </motion.div>
+              );
+            })}
+          </div>
+          <div className="mx-4 mb-4 border-t border-border pt-4">
+            <button type="button" data-testid="button-toggle-simulator-calculation" onClick={onToggleCalculation} className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1 uppercase tracking-wider">{calculationOpen ? "Hide calculation detail" : "Show calculation detail"}<ChevronDown size={14} className={calculationOpen ? "rotate-180" : ""} /></button>
+            <AnimatePresence initial={false}>
+              {calculationOpen && (
+                <motion.div initial={reducedMotion ? false : { height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={reducedMotion ? undefined : { height: 0, opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }} className="overflow-hidden">
+                  <div className="mt-3 bg-background border border-border rounded p-3 space-y-2">
+                    <div className="text-xs text-muted-foreground">Normalised signals are shown only here for policy inspection.</div>
+                    {SIGNAL_KEYS.map((key) => {
+                      const breakdown = decision.scoreBreakdown.find((item) => item.key === key);
+                      return <div className="flex items-center justify-between text-xs" key={key}><span>{SIGNAL_LABELS[key]}</span><b>{decision.signals[key].toFixed(2)}{breakdown ? ` · +${breakdown.contribution}` : " · not scored"}</b></div>;
+                    })}
+                    {decision.scoreBreakdown.length === 0 && <div className="text-xs text-muted-foreground">No action score is calculated for this state.</div>}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NudgeStudio({
+  decision,
+  initialCopy,
+  workflowStatus,
+  onClose,
+  onSaveDraft,
+  onApprove,
+  reducedMotion,
+}: {
+  decision: Decision;
+  initialCopy: string;
+  workflowStatus: "Draft" | "Approved";
+  onClose: () => void;
+  onSaveDraft: (copy: string) => void;
+  onApprove: () => void;
+  reducedMotion: boolean;
+}) {
+  const [channel, setChannel] = useState<Channel>(decision.channelPlan.primary);
+  const [copy, setCopy] = useState(initialCopy);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [approved, setApproved] = useState(workflowStatus === "Approved");
+  const edited = copy !== initialCopy;
+
+  useEffect(() => {
+    setChannel(decision.channelPlan.primary);
+    setCopy(initialCopy);
+    setDraftSaved(false);
+    setApproved(workflowStatus === "Approved");
+  }, [decision.channelPlan.primary, decision.customer.id, decision.selectedAction, initialCopy, workflowStatus]);
+
+  const channelDescription = channel === "In-app"
+    ? decision.channelPlan.inApp
+    : channel === "Push"
+      ? decision.channelPlan.push
+      : decision.channelPlan.whatsapp;
+
+  const saveDraft = () => {
+    onSaveDraft(copy);
+    setDraftSaved(true);
+  };
+
+  const approve = () => {
+    onApprove();
+    setApproved(true);
+  };
+
+  return (
+    <motion.div initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} className="fixed inset-0 bg-foreground/20 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+      <motion.div initial={reducedMotion ? false : { opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, scale: 0.98, y: 8 }} transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }} className="bg-card rounded-xl shadow-2xl border border-border w-full max-w-4xl max-h-full flex flex-col overflow-hidden">
         <div className="p-5 border-b border-border flex justify-between items-start bg-background">
           <div>
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-1">NUDGE STUDIO · LOCAL DRAFT</div>
-            <h2 className="text-2xl font-bold text-foreground">{customer.action}</h2>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-1">NUDGE STUDIO · {approved ? "APPROVED WORKFLOW" : "LOCAL DRAFT"}</div>
+            <h2 className="text-2xl font-bold text-foreground">{decision.selectedAction}</h2>
           </div>
-          <button data-testid="button-close-studio" className="p-2 text-muted-foreground hover:bg-border/50 rounded-lg transition-colors" onClick={onClose}><X size={20} /></button>
+          <button type="button" data-testid="button-close-studio" aria-label="Close Nudge Studio" className="p-2 text-muted-foreground hover:bg-border/50 rounded-lg transition-colors" onClick={onClose}><X size={20} /></button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-8">
-          <div className="grid grid-cols-2 gap-10 mb-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
             <div>
               <h3 className="font-bold text-foreground mb-3 text-lg">Rationale & delivery logic</h3>
-              <p className="text-sm font-medium text-muted-foreground mb-6 leading-relaxed">Selected because the customer has started a funding flow and has no completed A2T action.</p>
-              
+              <p className="text-sm font-medium text-muted-foreground mb-6 leading-relaxed">{decision.rationale}</p>
               <div className="space-y-4 text-sm bg-background border border-border rounded-lg p-4">
-                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Deep-link</b><span className="flex-1 text-muted-foreground font-mono text-xs mt-0.5">/activate/add-funds</span></div>
-                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Primary channel</b><span className="flex-1 text-muted-foreground">In-app, next active session</span></div>
-                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Fallback</b><span className="flex-1 text-muted-foreground">Push after 24 hours; WhatsApp after 48 hours</span></div>
-                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Suppression</b><span className="flex-1 text-muted-foreground">Stop on A2T, opt-out, or two ignored pushes</span></div>
+                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Deep-link</b><span className="flex-1 text-muted-foreground font-mono text-xs mt-0.5 break-all">{decision.customerOwnedDeepLinkContext}</span></div>
+                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Primary channel</b><span className="flex-1 text-muted-foreground">{decision.channelPlan.primary}</span></div>
+                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Delivery</b><span className="flex-1 text-muted-foreground">{channelDescription}</span></div>
+                <div className="flex"><b className="w-1/3 text-foreground font-semibold">Suppression</b><span className="flex-1 text-muted-foreground">{decision.suppressionRules.join("; ")}</span></div>
               </div>
             </div>
-            
+
             <div className="bg-background border border-border rounded-xl p-6 flex flex-col items-center justify-center">
-              <div className="flex gap-6 mb-6 text-sm w-full justify-center">
-                <b className="text-foreground border-b-2 border-foreground pb-1">In-app</b>
-                <span className="text-muted-foreground font-medium pb-1">Push</span>
-                <span className="text-muted-foreground font-medium pb-1">WhatsApp</span>
+              <div className="flex gap-6 mb-6 text-sm w-full justify-center border-b border-border">
+                {(["In-app", "Push", "WhatsApp"] as Channel[]).map((option) => (
+                  <button type="button" data-testid={`tab-nudge-${option}`} onClick={() => setChannel(option)} key={option} className={`relative pb-2 font-medium ${channel === option ? "text-foreground" : "text-muted-foreground"}`}>
+                    {option}
+                    {channel === option && <motion.span layoutId="nudge-active-underline" className="absolute left-0 right-0 bottom-[-1px] h-0.5 bg-primary" transition={{ duration: reducedMotion ? 0 : 0.18, ease: "easeOut" }} />}
+                  </button>
+                ))}
               </div>
-              <div className="bg-card border border-border rounded-xl shadow-md p-5 w-full max-w-[280px]">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-4">
-                  <MessageSquare size={18} />
-                </div>
-                <b className="block text-foreground mb-2 text-sm font-bold">One useful next step</b>
-                <p className="text-sm text-muted-foreground mb-5 leading-relaxed">{copy}</p>
-                <button className="w-full bg-primary text-primary-foreground py-2.5 rounded-lg font-semibold text-sm hover:bg-primary/90 transition-colors shadow-sm">Continue</button>
-              </div>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div key={`${decision.selectedAction}-${channel}`} initial={reducedMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? undefined : { opacity: 0, x: -8 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="bg-card border border-border rounded-xl shadow-md p-5 w-full max-w-[280px]">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-4"><MessageSquare size={18} /></div>
+                  <b className="block text-foreground mb-2 text-sm font-bold">{channel === "In-app" ? "One useful next step" : channel === "Push" ? "A reminder when useful" : "A helpful follow-up"}</b>
+                  <p className="text-sm text-muted-foreground mb-5 leading-relaxed">{copy}</p>
+                  <div className="text-xs text-muted-foreground border-t border-border pt-3">{channelDescription}</div>
+                  <button type="button" className="w-full mt-4 bg-primary text-primary-foreground py-2.5 rounded-lg font-semibold text-sm hover:bg-primary/90 transition-colors shadow-sm">Continue</button>
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
-          
+
           <div className="mb-8 border-t border-border pt-8">
-            <h3 className="font-bold text-foreground mb-4 flex items-center gap-2 text-lg">
-              <Sparkles size={18} className="text-primary" />
-              Safe local mock AI variants
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              {["Your account is ready for the next step. Add funds to continue when you’re ready.", "You’ve started setting up your account. Add funds whenever it suits you.", "A small next step is ready: add funds to keep your activation moving."].map((v, i) => (
-                <button 
-                  data-testid={`button-variant-${i}`}
-                  key={v} 
-                  onClick={() => setCopy(v)}
-                  className={`text-left p-4 rounded-lg text-sm transition-all border ${copy === v ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border hover:border-muted-foreground bg-card shadow-sm'}`}
-                >
-                  <span className="block text-[10px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">Variant {i + 1}</span>
-                  <span className="text-foreground leading-relaxed font-medium">{v}</span>
+            <h3 className="font-bold text-foreground mb-4 flex items-center gap-2 text-lg"><Sparkles size={18} className="text-primary" /> Safe local mock AI variants</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {decision.copyVariants.map((variant, index) => (
+                <button type="button" data-testid={`button-variant-${index}`} key={variant} onClick={() => { setCopy(variant); setDraftSaved(false); }} className={`text-left p-4 rounded-lg text-sm transition-all border ${copy === variant ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:border-muted-foreground bg-card shadow-sm"}`}>
+                  <span className="flex items-center justify-between text-[10px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">Variant {index + 1}{copy === variant && <Check size={13} className="text-primary" />}</span>
+                  <span className="text-foreground leading-relaxed font-medium">{variant}</span>
                 </button>
               ))}
             </div>
           </div>
-          
+
           <div>
-            <label className="block text-sm font-bold text-foreground mb-2">PM-approved copy</label>
-            <textarea 
-              data-testid="textarea-nudge-copy"
-              className="w-full bg-card border border-border rounded-lg p-4 text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 resize-none transition-all shadow-sm" 
-              rows={3} 
-              value={copy} 
-              onChange={e => setCopy(e.target.value)} 
-            />
+            <label className="block text-sm font-bold text-foreground mb-2" htmlFor="textarea-nudge-copy">PM-approved copy {edited && <span className="text-primary font-medium">· Edited by PM</span>}</label>
+            <textarea data-testid="textarea-nudge-copy" id="textarea-nudge-copy" className="w-full bg-card border border-border rounded-lg p-4 text-sm font-medium focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none transition-all shadow-sm" rows={3} value={copy} onChange={(event) => { setCopy(event.target.value); setDraftSaved(false); }} />
           </div>
+          <AnimatePresence>
+            {draftSaved && <motion.div initial={reducedMotion ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0 }} className="mt-3 text-sm font-semibold text-[#18794E] flex items-center gap-2"><Check size={15} /> Draft saved locally</motion.div>}
+          </AnimatePresence>
         </div>
-        
+
         <div className="p-5 border-t border-border bg-background flex justify-end gap-3">
-          <Button onClick={onClose} data-testid="button-save-draft">Save draft</Button>
-          <Button primary onClick={onApprove} data-testid="button-approve-workflow"><Send size={14} /> Approve workflow</Button>
+          <Button disabled={!edited} onClick={saveDraft} testId="button-save-draft">Save draft</Button>
+          <Button primary disabled={approved || !copy.trim()} onClick={approve} testId="button-approve-workflow">{approved ? <><Check size={14} /> Approved workflow</> : <><Send size={14} /> Approve workflow</>}</Button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

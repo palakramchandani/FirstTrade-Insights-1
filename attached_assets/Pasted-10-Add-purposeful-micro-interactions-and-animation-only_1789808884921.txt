@@ -1,0 +1,51 @@
+10. Add purposeful micro-interactions and animation only after flow logic is fixed.
+
+Use Framer Motion or equivalent. Respect prefers-reduced-motion. All motion must be 180–450ms with ease-out easing.
+
+COHORTS:
+- On page load, reveal the four-stage activation journey left to right once.
+- Draw the connector line over 450ms.
+- Hovering a cohort gently lifts its surface by 2px and reveals the “View customers” action.
+- Clicking View customers animates the active cohort filter into the Decisions page.
+
+DECISIONS:
+- On customer-row hover, show a subtle background shift and View Decision affordance.
+- On row selection, keep the queue stable and slide/fade the detail panel in from the right over 220ms.
+- When recommendation changes, fade the old action down and fade the new action up.
+- Expand “View score calculation” with a smooth height transition.
+- Animate only the five signal bars once when the calculation is opened.
+
+SIMULATOR:
+- When a PM changes a product-state control, highlight the changed field briefly in pale blue.
+- Recalculate candidate scores immediately.
+- Highlight only scores that changed.
+- Show “Recommendation updated” for 1.5 seconds.
+- Cross-fade Nudge Studio previews when the recommendation changes.
+- Never animate all sliders or numbers continuously.
+
+NUDGE STUDIO:
+- Make In-app, Push, and WhatsApp real tabs with an animated active underline.
+- Cross-fade between channel previews.
+- When a PM selects an AI variant, show a small selected check state.
+- When the PM edits copy, show “Edited by PM” and enable Save Draft.
+- On Save Draft, show a small “Draft saved locally” confirmation.
+- On Approve Workflow, transition the workflow from Draft to Approved with a restrained checkmark animation.
+
+POLICY STUDIO:
+- Changing a weight or threshold immediately marks the version “Unsaved changes.”
+- Animate before/after customer-action changes when Preview Affected Customers is clicked.
+- Highlight action changes with blue; removed recommendations with muted grey.
+- On Publish Simulated Version, show a policy-version transition:
+  Draft v1.1 → Live simulated v1.1
+- Do not use confetti.
+
+MEASUREMENT:
+- Animate the Control and Treatment journey lines toward the same A2T outcome once when the page opens.
+- Reveal event trail steps sequentially on scroll.
+- Do not animate charts or show fake performance changes.
+
+GLOBAL:
+- Buttons: 150ms hover/press state.
+- Inputs: soft focus ring and immediate value feedback.
+- Tooltips: 150ms fade for score definitions and compliance notes.
+- No loops, floating objects, bouncing, spinning, neon glow, animated backgrounds, or decorative motion.

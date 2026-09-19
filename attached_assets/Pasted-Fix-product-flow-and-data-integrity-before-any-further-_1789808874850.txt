@@ -1,0 +1,50 @@
+Fix product flow and data integrity before any further visual or animation work.
+
+The selected recommendation must become the single source of truth across Decisions, Simulator, Nudge Studio, Policy Studio, and Measurement.
+
+1. Create a unified decision object containing:
+customer, cohort, account state, eligible actions, candidate scores, selected action, cohort default, replacement rationale, completed actions, customer-owned deep-link context, channel plan, suppression rules, AI copy variants, policy version, and A2T status.
+
+2. Pass this decision object everywhere.
+Do not hard-code Add Funds copy, deep links, rationale, score breakdown, default action, or AI variants.
+
+3. Fix action-specific Nudge Studio:
+- Start MF Investing → MF deep link, SIP/MF copy, MF variants
+- Create Pre-order → selected-instrument pre-order deep link and copy
+- Activate Segment → segment activation deep link and copy
+- Take First Trade → saved watchlist, pre-order, or self-selected instrument context
+- Add Funds → Add Funds flow
+- Recovery → Re-KYC / Re-KRA only
+
+4. Fix required logic:
+- KYC/KRA rejected: recovery only, no score.
+- Pre-order submitted or MF order submitted: A2T achieved, no recommendation.
+- Exchange approved plus no A2T: Take First Trade must win for the Exchange Approved demo scenario.
+- KRA pending is not rejected. It must not block product exploration.
+- Never repeat a completed action.
+
+5. Replace Simulator’s primary numeric sliders with meaningful product-state controls. Keep normalised values internal and show them only in expanded calculation detail.
+
+6. Make Cohort “View customers” apply a visible filter in Decisions and update the selected customer.
+
+7. Make In-app, Push, and WhatsApp real preview tabs.
+Use one shared delivery policy:
+- In-app immediately in active session
+- Push 30 minutes after exit if incomplete
+- WhatsApp 24 hours later if incomplete and consent eligible
+- Suppress after completion, opt-out, or two ignored pushes in seven days
+
+8. Make Policy Studio dynamic:
+- edits mark the policy as unsaved
+- Preview affected customers recalculates recommendations
+- show changed customer count and before/after action
+- validate action weights total 80
+- Publish simulated version updates policy version across queue and decision records
+
+9. Fix Measurement:
+Primary metric = A2T success within seven days of e-sign.
+Success events = pre-order submitted, MF order submitted, or first trade placed.
+Control = existing static cohort journey including completed-action suppression.
+Treatment = existing journey plus FirstTrade-selected action.
+
+Verify all seven demo scenarios after the repair.
