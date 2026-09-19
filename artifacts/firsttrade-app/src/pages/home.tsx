@@ -17,11 +17,12 @@ import {
   Send,
   Settings2,
   SlidersHorizontal,
+  Moon,
   Sparkles,
+  Sun,
   Target,
   UserRound,
   X,
-  Zap,
 } from "lucide-react";
 import {
   ACTIONS,
@@ -50,6 +51,7 @@ type Area = "Overview" | "Cohorts" | "Decisions" | "Policy Studio" | "Measuremen
 type Tone = "blue" | "green" | "red" | "slate";
 type SimulatorField = keyof SimulatorState | "scenario";
 type ActionFilter = "All actions" | DecisionAction;
+type Theme = "light" | "dark";
 
 const nav = [
   { label: "Overview", icon: LayoutDashboard },
@@ -214,6 +216,12 @@ export default function Home() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "light";
+    const savedTheme = window.localStorage.getItem("firsttrade-theme");
+    if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
 
   const [livePolicy, setLivePolicy] = useState<Policy>(() => clonePolicy(DEFAULT_POLICY));
   const [draftPolicy, setDraftPolicy] = useState<Policy>(() => ({ ...clonePolicy(DEFAULT_POLICY), version: "1.1" }));
@@ -256,6 +264,12 @@ export default function Home() {
       setTourOpen(true);
     }
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem("firsttrade-theme", theme);
+  }, [theme]);
 
   const openCustomerDecision = (id: string, nextArea: Area = "Decisions") => {
     setSelectedId(id);
@@ -400,14 +414,10 @@ export default function Home() {
 
   return (
     <div className="app-shell flex h-screen w-full bg-background text-foreground font-sans overflow-hidden selection:bg-primary/20">
-      <div className="ambient-layer" aria-hidden="true">
-        <span className="ambient-orb ambient-orb-one" />
-        <span className="ambient-grid" />
-      </div>
       <aside className="aurora-sidebar hidden lg:flex w-64 border-r border-border bg-card flex-col shrink-0 z-10">
         <div className="p-4 border-b border-border flex items-center gap-3">
-          <div className="brand-mark w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><Zap size={16} fill="currentColor" /></div>
-          <div><div className="font-bold text-sm text-foreground leading-tight tracking-tight">FirstTrade</div><div className="text-xs font-medium text-muted-foreground">Decision orbit</div></div>
+          <div className="brand-mark w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><BarChart3 size={16} /></div>
+          <div><div className="font-bold text-sm text-foreground leading-tight tracking-tight">FirstTrade</div><div className="text-xs font-medium text-muted-foreground">Decision intelligence</div></div>
         </div>
         <div className="p-4 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-background transition-colors">
           <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground">PM</div>
@@ -421,7 +431,7 @@ export default function Home() {
               key={label}
               data-testid={`nav-${label.replace(/\s+/g, "-")}`}
               onClick={() => navigate(label)}
-              className={`nav-orbit-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${area === label ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
+              className={`nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${area === label ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
             >
               <Icon size={16} className={area === label ? "text-primary" : "text-muted-foreground"} />
               {label}
@@ -445,10 +455,14 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3 sm:gap-5">
             <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-muted-foreground bg-background border border-border px-2 py-1 rounded-full">
-              <span className="status-pulse w-1.5 h-1.5 rounded-full bg-[#4DFFD2]" /> All systems synthetic
+              <span className="status-pulse w-1.5 h-1.5 rounded-full bg-[#22A775]" /> All systems synthetic
+            </div>
+            <div className="theme-selector" role="group" aria-label="Color theme">
+              <button type="button" data-testid="button-theme-light" aria-label="Use light theme" aria-pressed={theme === "light"} onClick={() => setTheme("light")} className={theme === "light" ? "is-active" : ""}><Sun size={14} /><span className="hidden xl:inline">Light</span></button>
+              <button type="button" data-testid="button-theme-dark" aria-label="Use dark theme" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")} className={theme === "dark" ? "is-active" : ""}><Moon size={14} /><span className="hidden xl:inline">Dark</span></button>
             </div>
             <button type="button" data-testid="button-replay-tour" aria-label="Replay signal tour" onClick={() => { setTourStep(0); setTourOpen(true); navigate("Overview"); }} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors">
-              <Sparkles size={14} /> Guide
+              <Info size={14} /> Guide
             </button>
             <div className="relative">
               <button type="button" data-testid="button-notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((current) => !current)} className="text-muted-foreground hover:text-foreground transition-colors"><Bell size={18} /></button>
@@ -490,11 +504,11 @@ export default function Home() {
             <motion.button type="button" aria-label="Close navigation menu" initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} onClick={() => setMobileMenuOpen(false)} className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" />
             <motion.aside initial={reducedMotion ? false : { x: -280 }} animate={{ x: 0 }} exit={reducedMotion ? undefined : { x: -280 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="aurora-sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[86vw] flex-col border-r border-border bg-card shadow-2xl lg:hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-3"><div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center"><Zap size={16} fill="currentColor" /></div><div><div className="font-bold text-sm text-foreground">FirstTrade</div><div className="text-xs text-muted-foreground">Decision centre</div></div></div>
+                <div className="flex items-center gap-3"><div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center"><BarChart3 size={16} /></div><div><div className="font-bold text-sm text-foreground">FirstTrade</div><div className="text-xs text-muted-foreground">Decision intelligence</div></div></div>
                 <button type="button" aria-label="Close navigation menu" onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-muted-foreground hover:text-foreground"><X size={18} /></button>
               </div>
               <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                {nav.map(({ label, icon: Icon }) => <button type="button" key={label} data-testid={`mobile-nav-${label.replace(/\s+/g, "-")}`} onClick={() => navigate(label)} className={`nav-orbit-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium ${area === label ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}><Icon size={16} />{label}{label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.length}</span>}</button>)}
+                {nav.map(({ label, icon: Icon }) => <button type="button" key={label} data-testid={`mobile-nav-${label.replace(/\s+/g, "-")}`} onClick={() => navigate(label)} className={`nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${area === label ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}><Icon size={16} />{label}{label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.length}</span>}</button>)}
               </nav>
               <div className="p-4 border-t border-border text-xs font-medium text-muted-foreground space-y-2"><div className="flex items-center gap-2"><CircleAlert size={14} /> Policy v{livePolicy.version}</div><div className="flex items-center gap-2"><UserRound size={14} /> PM workspace</div></div>
             </motion.aside>
@@ -538,23 +552,25 @@ function OverviewPage({
   const priority = decisions.filter((decision) => decision.selectedAction !== "No recommendation").slice(0, 3);
   return (
     <>
-      <section className="orbital-hero overflow-hidden">
-        <div className="relative z-10 max-w-2xl">
+      <section className="dashboard-hero overflow-hidden">
+        <div className="relative z-10">
           <div className="eyebrow-chip mb-5"><span className="live-dot" /> LIVE ACTIVATION INTELLIGENCE</div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-[-0.05em] text-foreground leading-[0.98]">Make every <span className="hero-gradient-text">next move</span> feel obvious.</h1>
           <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed text-muted-foreground">FirstTrade turns activation signals into a single, customer-safe action—so momentum never quietly disappears from the journey.</p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Button primary onClick={onOpenQueue} testId="button-open-decision-queue-hero" className="hero-primary-button"><Zap size={15} fill="currentColor" /> Enter decision queue <ArrowRight size={15} /></Button>
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground px-3 py-2 rounded-full border border-border bg-background/50"><span className="status-pulse w-2 h-2 rounded-full bg-[#4DFFD2]" /> 98.4% signal coverage</div>
+            <Button primary onClick={onOpenQueue} testId="button-open-decision-queue-hero" className="hero-primary-button">Enter decision queue <ArrowRight size={15} /></Button>
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground px-3 py-2 rounded-full border border-border bg-background/50"><span className="status-pulse w-2 h-2 rounded-full bg-[#22A775]" /> 98.4% signal coverage</div>
           </div>
         </div>
-        <div className="hero-orbit-scene" aria-hidden="true">
-          <motion.div className="orbit-ring orbit-ring-one" animate={reducedMotion ? undefined : { rotate: 360 }} transition={{ duration: 52, repeat: Infinity, ease: "linear" }} />
-          <div className="orbit-ring orbit-ring-two" />
-          <motion.div className="orbit-node orbit-node-cyan" animate={reducedMotion ? undefined : { y: [0, -5, 0] }} transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut" }}><Target size={18} /></motion.div>
-          <div className="orbit-node orbit-node-violet"><Sparkles size={18} /></div>
-          <div className="signal-core"><Zap size={26} fill="currentColor" /></div>
-          <div className="orbit-readout"><span>PRIMARY SIGNAL</span><b>Funding intent</b><em>+ 0.80</em></div>
+        <div className="hero-signal-summary" aria-label="Primary activation signal">
+          <div className="flex items-start justify-between gap-4">
+            <div><span className="signal-label">PRIMARY SIGNAL</span><h2>Funding intent</h2></div>
+            <span className="signal-score">+0.80</span>
+          </div>
+          <div className="signal-meter" aria-hidden="true"><motion.span initial={reducedMotion ? false : { width: 0 }} animate={{ width: "80%" }} transition={{ duration: reducedMotion ? 0 : 0.5, ease: "easeOut" }} /></div>
+          <div className="signal-summary-row"><span>Confidence</span><b>High</b></div>
+          <div className="signal-summary-row"><span>Recommended action</span><b>Add funds</b></div>
+          <div className="signal-summary-row"><span>Policy</span><b>v1.0</b></div>
         </div>
       </section>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
@@ -1147,12 +1163,12 @@ function CoachmarkTour({
 }) {
   const steps = [
     {
-      eyebrow: "WELCOME TO DECISION ORBIT",
-      title: "Your activation system has a pulse.",
-      copy: "Start here to see the live signal moving from account activation to a customer-safe next step.",
-      label: "Overview signal map",
+      eyebrow: "WELCOME TO FIRSTTRADE",
+      title: "See the activation picture first.",
+      copy: "Start here to understand how account signals become a customer-safe next action.",
+      label: "Overview",
       action: "Show the decision queue",
-      icon: Zap,
+      icon: BarChart3,
     },
     {
       eyebrow: "FOLLOW THE SIGNAL",
@@ -1192,7 +1208,6 @@ function CoachmarkTour({
         transition={{ duration: reducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
         className="coachmark-card relative w-full max-w-md overflow-hidden rounded-[1.5rem] border border-border p-6 sm:p-7"
       >
-        <div className="coachmark-glow" />
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div className="coachmark-icon"><Icon size={21} /></div>
           <button type="button" onClick={onDismiss} className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">Skip tour</button>
@@ -1201,7 +1216,7 @@ function CoachmarkTour({
           <div className="text-[11px] font-bold tracking-[0.16em] text-primary">{active.eyebrow}</div>
           <h2 id="signal-tour-title" className="mt-3 text-3xl font-bold leading-[1.02] tracking-[-0.04em] text-foreground">{active.title}</h2>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{active.copy}</p>
-          <div className="tour-location mt-5"><Sparkles size={14} /> Now exploring: {active.label}</div>
+          <div className="tour-location mt-5"><Info size={14} /> Now exploring: {active.label}</div>
         </div>
         <div className="relative z-10 mt-7 flex items-center justify-between gap-4">
           <div className="flex gap-1.5" aria-label={`Step ${step + 1} of 3`}>
