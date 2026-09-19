@@ -401,9 +401,7 @@ export default function Home() {
   return (
     <div className="app-shell flex h-screen w-full bg-background text-foreground font-sans overflow-hidden selection:bg-primary/20">
       <div className="ambient-layer" aria-hidden="true">
-        <motion.span className="ambient-orb ambient-orb-one" animate={reducedMotion ? undefined : { y: [0, -26, 0], x: [0, 14, 0], rotate: [0, 8, 0] }} transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }} />
-        <motion.span className="ambient-orb ambient-orb-two" animate={reducedMotion ? undefined : { y: [0, 30, 0], x: [0, -18, 0], rotate: [0, -12, 0] }} transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }} />
-        <motion.span className="ambient-orb ambient-orb-three" animate={reducedMotion ? undefined : { y: [0, -18, 0], scale: [1, 1.08, 1] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} />
+        <span className="ambient-orb ambient-orb-one" />
         <span className="ambient-grid" />
       </div>
       <aside className="aurora-sidebar hidden lg:flex w-64 border-r border-border bg-card flex-col shrink-0 z-10">
@@ -551,29 +549,28 @@ function OverviewPage({
           </div>
         </div>
         <div className="hero-orbit-scene" aria-hidden="true">
-          <motion.div className="orbit-ring orbit-ring-one" animate={reducedMotion ? undefined : { rotate: 360 }} transition={{ duration: 30, repeat: Infinity, ease: "linear" }} />
-          <motion.div className="orbit-ring orbit-ring-two" animate={reducedMotion ? undefined : { rotate: -360 }} transition={{ duration: 22, repeat: Infinity, ease: "linear" }} />
-          <motion.div className="orbit-node orbit-node-cyan" animate={reducedMotion ? undefined : { y: [0, -10, 0], x: [0, 8, 0] }} transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}><Target size={18} /></motion.div>
-          <motion.div className="orbit-node orbit-node-violet" animate={reducedMotion ? undefined : { y: [0, 10, 0], x: [0, -6, 0] }} transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}><Sparkles size={18} /></motion.div>
-          <motion.div className="signal-core" animate={reducedMotion ? undefined : { scale: [1, 1.1, 1], boxShadow: ["0 0 0 0 rgba(105,234,255,0.25)", "0 0 0 18px rgba(105,234,255,0)", "0 0 0 0 rgba(105,234,255,0)"] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}><Zap size={26} fill="currentColor" /></motion.div>
+          <motion.div className="orbit-ring orbit-ring-one" animate={reducedMotion ? undefined : { rotate: 360 }} transition={{ duration: 52, repeat: Infinity, ease: "linear" }} />
+          <div className="orbit-ring orbit-ring-two" />
+          <motion.div className="orbit-node orbit-node-cyan" animate={reducedMotion ? undefined : { y: [0, -5, 0] }} transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut" }}><Target size={18} /></motion.div>
+          <div className="orbit-node orbit-node-violet"><Sparkles size={18} /></div>
+          <div className="signal-core"><Zap size={26} fill="currentColor" /></div>
           <div className="orbit-readout"><span>PRIMARY SIGNAL</span><b>Funding intent</b><em>+ 0.80</em></div>
         </div>
       </section>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
         {[
-          ["Customers ready for a next action", 2667, "metric-1", "cyan"],
-          ["A2T successes this journey", 1184, "metric-2", "violet"],
-          ["Better-than-default decisions", 318, "metric-3", "lime"],
+          ["Customers ready for a next action", 2667, "metric-1"],
+          ["A2T successes this journey", 1184, "metric-2"],
+          ["Better-than-default decisions", 318, "metric-3"],
         ].map(([label, value, testId]) => (
           <motion.div
             key={label}
             initial={reducedMotion ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
-            whileHover={reducedMotion ? undefined : { y: -5, scale: 1.01 }}
-            className={`metric-card metric-card--${testId === "metric-1" ? "cyan" : testId === "metric-2" ? "violet" : "lime"} border border-border p-5 rounded-2xl shadow-sm`}
+            whileHover={reducedMotion ? undefined : { y: -3 }}
+            className="metric-card border border-border p-5 rounded-2xl shadow-sm"
           >
-            <div className="metric-card__shine" />
             <div className="relative z-10 text-sm text-muted-foreground mb-2">{label}</div>
             <div className="relative z-10 text-3xl font-bold tracking-tight text-foreground" data-testid={testId}><AnimatedMetric value={value as number} reducedMotion={reducedMotion} /></div>
             <div className="relative z-10 mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><span className="metric-trend">↗</span> {testId === "metric-1" ? "12% since last week" : testId === "metric-2" ? "14.8% conversion" : "trusted policy overrides"}</div>
@@ -1195,7 +1192,7 @@ function CoachmarkTour({
         transition={{ duration: reducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
         className="coachmark-card relative w-full max-w-md overflow-hidden rounded-[1.5rem] border border-border p-6 sm:p-7"
       >
-        <motion.div className="coachmark-glow" animate={reducedMotion ? undefined : { x: [0, 40, 0], y: [0, -16, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
+        <div className="coachmark-glow" />
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div className="coachmark-icon"><Icon size={21} /></div>
           <button type="button" onClick={onDismiss} className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">Skip tour</button>

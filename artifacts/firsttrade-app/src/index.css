@@ -190,9 +190,8 @@
     @apply font-sans antialiased bg-background text-foreground;
     min-height: 100vh;
     background-image:
-      radial-gradient(circle at 10% -10%, rgba(116, 87, 255, 0.18), transparent 28rem),
-      radial-gradient(circle at 92% 14%, rgba(77, 255, 210, 0.09), transparent 25rem),
-      linear-gradient(135deg, #06091b 0%, #071325 52%, #070a1a 100%);
+      radial-gradient(circle at 78% -20%, rgba(91, 123, 205, 0.11), transparent 34rem),
+      linear-gradient(135deg, #070c19 0%, #091225 52%, #070b17 100%);
   }
 }
 
@@ -272,7 +271,7 @@
   .ambient-grid {
     position: absolute;
     inset: 0;
-    opacity: 0.34;
+    opacity: 0.18;
     background-image:
       linear-gradient(rgba(137, 198, 255, 0.035) 1px, transparent 1px),
       linear-gradient(90deg, rgba(137, 198, 255, 0.035) 1px, transparent 1px);
@@ -284,32 +283,16 @@
     position: absolute;
     display: block;
     border-radius: 999px;
-    filter: blur(1px);
-    opacity: 0.74;
+    filter: blur(10px);
+    opacity: 0.34;
   }
 
   .ambient-orb-one {
-    top: -15rem;
-    right: 5%;
-    width: 34rem;
-    height: 34rem;
-    background: radial-gradient(circle at 35% 35%, rgba(115, 96, 255, 0.32), rgba(115, 96, 255, 0.04) 60%, transparent 71%);
-  }
-
-  .ambient-orb-two {
-    bottom: -18rem;
-    left: 17%;
+    top: -20rem;
+    right: 2%;
     width: 38rem;
     height: 38rem;
-    background: radial-gradient(circle, rgba(41, 231, 238, 0.15), rgba(41, 231, 238, 0.025) 58%, transparent 70%);
-  }
-
-  .ambient-orb-three {
-    top: 28%;
-    right: 29%;
-    width: 8rem;
-    height: 8rem;
-    background: radial-gradient(circle, rgba(205, 255, 101, 0.18), transparent 67%);
+    background: radial-gradient(circle at 40% 40%, rgba(115, 155, 255, 0.2), rgba(115, 155, 255, 0.025) 62%, transparent 72%);
   }
 
   .aurora-sidebar,
@@ -328,7 +311,7 @@
   }
 
   .brand-mark {
-    box-shadow: 0 0 0 1px rgba(219, 254, 255, 0.38), 0 10px 28px -10px rgba(67, 236, 255, 0.7);
+    box-shadow: 0 0 0 1px rgba(219, 254, 255, 0.22), 0 8px 20px -12px rgba(67, 236, 255, 0.48);
   }
 
   .nav-orbit-item {
@@ -364,9 +347,9 @@
     border: 1px solid rgba(141, 207, 255, 0.2);
     border-radius: 1.6rem;
     background:
-      linear-gradient(110deg, rgba(16, 32, 69, 0.97), rgba(16, 24, 59, 0.92) 56%, rgba(31, 18, 72, 0.78)),
-      linear-gradient(135deg, rgba(105, 234, 255, 0.15), transparent 40%);
-    box-shadow: 0 28px 78px -36px rgba(0, 0, 0, 0.95), inset 0 1px rgba(255, 255, 255, 0.05);
+      linear-gradient(110deg, rgba(15, 28, 57, 0.98), rgba(13, 23, 49, 0.97) 62%, rgba(20, 23, 55, 0.95)),
+      linear-gradient(135deg, rgba(105, 234, 255, 0.07), transparent 42%);
+    box-shadow: 0 22px 54px -40px rgba(0, 0, 0, 0.9), inset 0 1px rgba(255, 255, 255, 0.04);
   }
 
   .orbital-hero::after {
@@ -378,7 +361,7 @@
     height: 32rem;
     border: 1px solid rgba(123, 238, 255, 0.09);
     border-radius: 50%;
-    box-shadow: 0 0 0 52px rgba(123, 238, 255, 0.025), 0 0 0 104px rgba(157, 120, 255, 0.025);
+    box-shadow: 0 0 0 52px rgba(123, 238, 255, 0.014), 0 0 0 104px rgba(157, 120, 255, 0.012);
     pointer-events: none;
   }
 
@@ -402,18 +385,18 @@
     height: 0.42rem;
     border-radius: 50%;
     background: #4dffd2;
-    box-shadow: 0 0 0 4px rgba(77, 255, 210, 0.12), 0 0 16px rgba(77, 255, 210, 0.78);
+    box-shadow: 0 0 0 3px rgba(77, 255, 210, 0.08), 0 0 10px rgba(77, 255, 210, 0.42);
   }
 
   .hero-gradient-text {
     color: transparent;
-    background: linear-gradient(105deg, #bafaff 12%, #91a7ff 54%, #dd9bff 92%);
+    background: linear-gradient(105deg, #bafaff 15%, #8caeff 88%);
     background-clip: text;
     -webkit-background-clip: text;
   }
 
   .hero-primary-button {
-    box-shadow: 0 14px 32px -12px rgba(80, 234, 255, 0.85);
+    box-shadow: 0 12px 26px -16px rgba(80, 234, 255, 0.62);
   }
 
   .hero-orbit-scene {
@@ -428,7 +411,7 @@
 
   .orbit-ring {
     position: absolute;
-    border: 1px solid rgba(169, 235, 255, 0.22);
+    border: 1px solid rgba(169, 218, 255, 0.15);
     border-radius: 50%;
   }
 
@@ -441,12 +424,12 @@
     height: 0.45rem;
     border-radius: 50%;
     background: #6deaff;
-    box-shadow: 0 0 16px #6deaff;
+    box-shadow: 0 0 10px rgba(109, 234, 255, 0.58);
   }
 
   .orbit-ring-one { inset: 0; }
-  .orbit-ring-two { inset: 2.4rem; border-color: rgba(212, 154, 255, 0.32); }
-  .orbit-ring-two::after { background: #d99aff; box-shadow: 0 0 16px #d99aff; }
+  .orbit-ring-two { inset: 2.4rem; border-color: rgba(169, 185, 236, 0.16); }
+  .orbit-ring-two::after { display: none; }
 
   .signal-core,
   .orbit-node {
@@ -460,19 +443,19 @@
   .signal-core {
     inset: 5.55rem;
     color: #06111e;
-    background: linear-gradient(135deg, #a1f8ff, #60dfef);
-    box-shadow: 0 18px 34px -14px rgba(98, 234, 255, 0.85);
+    background: linear-gradient(135deg, #b9f4f8, #74d9e7);
+    box-shadow: 0 14px 28px -18px rgba(98, 234, 255, 0.62);
   }
 
   .orbit-node {
     width: 2.8rem;
     height: 2.8rem;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 18px 35px -14px rgba(0, 0, 0, 0.72);
+    box-shadow: 0 14px 28px -18px rgba(0, 0, 0, 0.72);
   }
 
-  .orbit-node-cyan { left: 0.5rem; top: 4.2rem; background: linear-gradient(135deg, #78eaff, #3187ee); color: #03101e; }
-  .orbit-node-violet { right: 0.7rem; bottom: 3.1rem; background: linear-gradient(135deg, #efb1ff, #8769fa); color: #1a0932; }
+  .orbit-node-cyan { left: 0.5rem; top: 4.2rem; background: linear-gradient(135deg, #83e1eb, #4c8fd0); color: #061421; }
+  .orbit-node-violet { right: 0.7rem; bottom: 3.1rem; background: linear-gradient(135deg, #c4b1e8, #7f74bd); color: #150f29; opacity: 0.82; }
 
   .orbit-readout {
     position: absolute;
@@ -495,23 +478,19 @@
   .metric-card {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(140deg, rgba(18, 33, 69, 0.96), rgba(10, 20, 48, 0.94));
-    box-shadow: 0 22px 50px -35px rgba(0, 0, 0, 0.92);
-    transition: box-shadow 220ms ease;
+    background: rgba(13, 25, 51, 0.94);
+    box-shadow: 0 16px 36px -32px rgba(0, 0, 0, 0.88);
+    transition: box-shadow 180ms ease, border-color 180ms ease;
   }
 
-  .metric-card:hover { box-shadow: 0 28px 58px -28px rgba(0, 0, 0, 0.96); }
-  .metric-card__shine { position: absolute; inset: 0; opacity: 0.5; background: radial-gradient(circle at 88% 0%, rgba(255,255,255,0.16), transparent 28%); }
-  .metric-card--cyan { border-color: rgba(109, 234, 255, 0.28); }
-  .metric-card--violet { border-color: rgba(210, 150, 255, 0.28); }
-  .metric-card--lime { border-color: rgba(205, 255, 101, 0.24); }
+  .metric-card:hover { border-color: rgba(109, 206, 230, 0.28); box-shadow: 0 20px 42px -32px rgba(0, 0, 0, 0.92); }
   .metric-trend { color: #4dffd2; font-size: 1rem; line-height: 0; }
 
   .hud-panel {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(145deg, rgba(16, 31, 65, 0.96), rgba(8, 17, 39, 0.97));
-    box-shadow: 0 30px 70px -44px rgba(0, 0, 0, 0.95), inset 0 1px rgba(255, 255, 255, 0.045);
+    background: rgba(12, 24, 49, 0.96);
+    box-shadow: 0 22px 52px -44px rgba(0, 0, 0, 0.92), inset 0 1px rgba(255, 255, 255, 0.035);
   }
 
   .hud-panel::before {
@@ -519,10 +498,10 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: linear-gradient(115deg, rgba(96, 224, 255, 0.08), transparent 26%, transparent 70%, rgba(181, 118, 255, 0.08));
+    background: linear-gradient(115deg, rgba(96, 224, 255, 0.025), transparent 28%, transparent 74%);
   }
 
-  .status-pulse { box-shadow: 0 0 0 4px rgba(77, 255, 210, 0.1), 0 0 14px rgba(77, 255, 210, 0.72); animation: signal-pulse 2.2s ease-in-out infinite; }
+  .status-pulse { box-shadow: 0 0 0 3px rgba(77, 255, 210, 0.07), 0 0 8px rgba(77, 255, 210, 0.38); animation: signal-pulse 3.2s ease-in-out infinite; }
 
   .coachmark-card {
     background: linear-gradient(145deg, rgba(20, 37, 80, 0.98), rgba(8, 16, 38, 0.98));
@@ -536,8 +515,8 @@
     width: 13rem;
     height: 13rem;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(128, 218, 255, 0.24), transparent 66%);
-    filter: blur(4px);
+    background: radial-gradient(circle, rgba(128, 218, 255, 0.12), transparent 66%);
+    filter: blur(8px);
   }
 
   .coachmark-icon {
