@@ -417,7 +417,7 @@ export default function Home() {
       <aside className="aurora-sidebar hidden lg:flex w-64 border-r border-border bg-card flex-col shrink-0 z-10">
         <div className="p-4 border-b border-border flex items-center gap-3">
           <div className="brand-mark w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><BarChart3 size={16} /></div>
-          <div><div className="font-bold text-sm text-foreground leading-tight tracking-tight">FirstTrade</div><div className="text-xs font-medium text-muted-foreground">Decision intelligence</div></div>
+          <div><div className="font-bold text-sm text-foreground leading-tight tracking-tight">FirsTrade</div><div className="text-xs font-medium text-muted-foreground">Decision intelligence</div></div>
         </div>
         <div className="p-4 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-background transition-colors">
           <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground">PM</div>
@@ -504,7 +504,7 @@ export default function Home() {
             <motion.button type="button" aria-label="Close navigation menu" initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} onClick={() => setMobileMenuOpen(false)} className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" />
             <motion.aside initial={reducedMotion ? false : { x: -280 }} animate={{ x: 0 }} exit={reducedMotion ? undefined : { x: -280 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="aurora-sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[86vw] flex-col border-r border-border bg-card shadow-2xl lg:hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-3"><div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center"><BarChart3 size={16} /></div><div><div className="font-bold text-sm text-foreground">FirstTrade</div><div className="text-xs text-muted-foreground">Decision intelligence</div></div></div>
+                <div className="flex items-center gap-3"><div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center"><BarChart3 size={16} /></div><div><div className="font-bold text-sm text-foreground">FirsTrade</div><div className="text-xs text-muted-foreground">Decision intelligence</div></div></div>
                 <button type="button" aria-label="Close navigation menu" onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-muted-foreground hover:text-foreground"><X size={18} /></button>
               </div>
               <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -556,7 +556,7 @@ function OverviewPage({
         <div className="relative z-10">
           <div className="eyebrow-chip mb-5"><span className="live-dot" /> LIVE ACTIVATION INTELLIGENCE</div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-[-0.05em] text-foreground leading-[0.98]">Make every <span className="hero-gradient-text">next move</span> feel obvious.</h1>
-          <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed text-muted-foreground">FirstTrade turns activation signals into a single, customer-safe action—so momentum never quietly disappears from the journey.</p>
+          <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed text-muted-foreground">FirsTrade turns activation signals into a single, customer-safe action—so momentum never quietly disappears from the journey.</p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Button primary onClick={onOpenQueue} testId="button-open-decision-queue-hero" className="hero-primary-button">Enter decision queue <ArrowRight size={15} /></Button>
             <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground px-3 py-2 rounded-full border border-border bg-background/50"><span className="status-pulse w-2 h-2 rounded-full bg-[#22A775]" /> 98.4% signal coverage</div>
@@ -721,7 +721,7 @@ function CohortsPage({
         <CircleAlert size={18} className="text-destructive shrink-0 mt-0.5" />
         <div className="flex-1 text-destructive">
           <b className="block mb-1">KRA / KYC rejected is recovery-only</b>
-          <p className="text-sm opacity-90">FirstTrade does not score or recommend trading actions here. The only eligible path is Complete Re-KYC / Re-KRA.</p>
+          <p className="text-sm opacity-90">FirsTrade does not score or recommend trading actions here. The only eligible path is Complete Re-KYC / Re-KRA.</p>
         </div>
         <Button onClick={onRecovery} testId="button-view-recovery-cohort">View recovery cohort</Button>
       </div>
@@ -1109,7 +1109,7 @@ function MeasurementPage({ decision, reducedMotion }: { decision: Decision; redu
         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
           <div className="text-xs font-bold text-primary uppercase tracking-wider mb-1">EXPERIMENT BRIEF</div>
           <h2 className="text-2xl font-bold text-foreground mb-3">Hypothesis</h2>
-          <p className="text-foreground text-lg font-medium leading-relaxed mb-8">If FirstTrade selects a customer-safe next action from account state and behaviour, more customers will reach A2T without increasing unwanted contact or repeated nudges.</p>
+          <p className="text-foreground text-lg font-medium leading-relaxed mb-8">If FirsTrade selects a customer-safe next action from account state and behaviour, more customers will reach A2T without increasing unwanted contact or repeated nudges.</p>
           <div className="space-y-4">
             {[
               ["Control", "Existing static cohort journey including completed-action suppression"],
@@ -1126,7 +1126,7 @@ function MeasurementPage({ decision, reducedMotion }: { decision: Decision; redu
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">JOURNEY ALIGNMENT</div>
           <h2 className="text-xl font-bold text-foreground mb-5">Same A2T outcome, different treatment</h2>
           <div className="space-y-4 mb-8">
-            {["Control · cohort default", "Treatment · FirstTrade action"].map((label, index) => (
+            {["Control · cohort default", "Treatment · FirsTrade action"].map((label, index) => (
               <div key={label}>
                 <div className="flex items-center justify-between text-sm mb-2"><span className="font-semibold text-foreground">{label}</span><span className="text-muted-foreground">A2T</span></div>
                 <div className="h-2 rounded-full bg-card border border-border overflow-hidden"><motion.div initial={reducedMotion ? false : { width: 0 }} animate={{ width: "100%" }} transition={{ duration: reducedMotion ? 0 : 0.45, delay: reducedMotion ? 0 : index * 0.1, ease: "easeOut" }} className={`h-full ${index === 0 ? "bg-muted-foreground/50" : "bg-primary"}`} /></div>
@@ -1163,7 +1163,7 @@ function CoachmarkTour({
 }) {
   const steps = [
     {
-      eyebrow: "WELCOME TO FIRSTTRADE",
+      eyebrow: "WELCOME TO FIRSTRADE",
       title: "See the activation picture first.",
       copy: "Start here to understand how account signals become a customer-safe next action.",
       label: "Overview",

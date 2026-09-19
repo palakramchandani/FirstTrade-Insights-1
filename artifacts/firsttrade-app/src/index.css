@@ -67,7 +67,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* FirstTrade light theme */
+/* FirsTrade light theme */
 :root {
   --button-outline: rgba(37, 99, 235, 0.16);
   --badge-outline: rgba(15, 23, 42, 0.08);
