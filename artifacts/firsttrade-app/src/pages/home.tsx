@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
-  FlaskConical,
   GitBranch,
   Info,
   LayoutDashboard,
@@ -47,7 +46,7 @@ import {
   type SimulatorState,
 } from "@/lib/firsttrade";
 
-type Area = "Overview" | "Cohorts" | "Decisions" | "Policy Studio" | "Measurement" | "Simulator";
+type Area = "Overview" | "Cohorts" | "Decisions" | "Policy Studio" | "Measurement";
 type Tone = "blue" | "green" | "red" | "slate";
 type SimulatorField = keyof SimulatorState | "scenario";
 type ActionFilter = "All actions" | DecisionAction;
@@ -58,29 +57,7 @@ const nav = [
   { label: "Decisions", icon: Target },
   { label: "Policy Studio", icon: Settings2 },
   { label: "Measurement", icon: BarChart3 },
-  { label: "Simulator", icon: FlaskConical },
 ] as const;
-
-const stateLabels: Record<SimulatorField, string> = {
-  eSignComplete: "Post e-sign",
-  kraStatus: "KRA status",
-  uccStatus: "UCC mapping",
-  mfAccountStatus: "MF account",
-  exchangeStatus: "Exchange approval",
-  fundingStatus: "Funding flow",
-  preOrderStatus: "Pre-order",
-  mfOrderStatus: "MF order",
-  firstTradeStatus: "First trade",
-  segmentStatus: "Segment activation",
-  a2tStatus: "A2T outcome",
-  savedWatchlist: "Saved watchlist",
-  sipCalculatorUsed: "SIP calculator activity",
-  segmentInterest: "Segment intent",
-  selectedInstrument: "Selected instrument",
-  optOut: "Opt-out",
-  ignoredPushes: "Ignored pushes",
-  scenario: "Demo scenario",
-};
 
 function Badge({ children, tone = "blue" }: { children: ReactNode; tone?: Tone }) {
   const tones: Record<Tone, string> = {
@@ -230,11 +207,13 @@ export default function Home() {
   const [actionFilter, setActionFilter] = useState<ActionFilter>("All actions");
   const [decisionFilterOpen, setDecisionFilterOpen] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
-  const [studioTarget, setStudioTarget] = useState<{ kind: "customer"; id: string } | { kind: "simulator"; decision: Decision } | null>(null);
+  const [studioTarget, setStudioTarget] = useState<{ id: string } | null>(null);
   const [copyOverrides, setCopyOverrides] = useState<Record<string, string>>({});
   const [workflowStatuses, setWorkflowStatuses] = useState<Record<string, "Draft" | "Approved">>({});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
 
   const [livePolicy, setLivePolicy] = useState<Policy>(() => clonePolicy(DEFAULT_POLICY));
   const [draftPolicy, setDraftPolicy] = useState<Policy>(() => ({ ...clonePolicy(DEFAULT_POLICY), version: "1.1" }));
@@ -242,19 +221,8 @@ export default function Home() {
   const [policyPreview, setPolicyPreview] = useState<PolicyPreview | null>(null);
   const [policyNotice, setPolicyNotice] = useState("");
 
-  const [scenario, setScenarioState] = useState<SimulatorScenario | "Manual controls">("Research-led account");
-  const [simulatorState, setSimulatorState] = useState<SimulatorState>(() => ({ ...SCENARIO_PRESETS["Research-led account"] }));
-  const [changedField, setChangedField] = useState<SimulatorField | null>(null);
-  const [changedScoreActions, setChangedScoreActions] = useState<Action[]>([]);
-  const [recommendationNotice, setRecommendationNotice] = useState("");
-  const [simulatorCalculationOpen, setSimulatorCalculationOpen] = useState(false);
-
   const decisions = useMemo(() => decisionsFor(livePolicy), [livePolicy]);
   const decisionsById = useMemo(() => new Map(decisions.map((decision) => [decision.customer.id, decision])), [decisions]);
-  const simulatorDecision = useMemo(
-    () => createDecision(profileFromSimulator(simulatorState), livePolicy),
-    [livePolicy, simulatorState],
-  );
 
   const filteredDecisions = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -268,19 +236,14 @@ export default function Home() {
 
   const selectedDecision = decisionsById.get(selectedId) ?? decisions[0];
   const visibleSelectedDecision = filteredDecisions.find((decision) => decision.customer.id === selectedId) ?? filteredDecisions[0] ?? null;
-  const studioDecision = studioTarget?.kind === "simulator"
-    ? studioTarget.decision
-    : studioTarget
-      ? decisionsById.get(studioTarget.id) ?? selectedDecision
-      : null;
+  const studioDecision = studioTarget
+    ? decisionsById.get(studioTarget.id) ?? selectedDecision
+    : null;
 
   const draftDecisions = useMemo(() => decisionsFor(draftPolicy), [draftPolicy]);
   const policyValid = draftPolicy.threshold >= 0
     && draftPolicy.threshold <= 100
     && ACTIONS.every((action) => policyWeightTotal(draftPolicy, action) === 80);
-
-  const previousScoresRef = useRef<Record<Action, number | null> | null>(null);
-  const previousRecommendationRef = useRef<DecisionAction | null>(null);
 
   useEffect(() => {
     if (filteredDecisions.length > 0 && !filteredDecisions.some((decision) => decision.customer.id === selectedId)) {
@@ -289,29 +252,10 @@ export default function Home() {
   }, [filteredDecisions, selectedId]);
 
   useEffect(() => {
-    const previous = previousScoresRef.current;
-    if (previous) {
-      setChangedScoreActions(ACTIONS.filter((action) => previous[action] !== simulatorDecision.candidateScores[action]));
+    if (window.localStorage.getItem("firsttrade-signal-tour-complete") !== "true") {
+      setTourOpen(true);
     }
-    previousScoresRef.current = simulatorDecision.candidateScores;
-  }, [simulatorDecision]);
-
-  useEffect(() => {
-    const previous = previousRecommendationRef.current;
-    if (previous && previous !== simulatorDecision.selectedAction) {
-      setRecommendationNotice("Recommendation updated");
-      const timeout = window.setTimeout(() => setRecommendationNotice(""), 1500);
-      return () => window.clearTimeout(timeout);
-    }
-    previousRecommendationRef.current = simulatorDecision.selectedAction;
-    return undefined;
-  }, [simulatorDecision.selectedAction]);
-
-  useEffect(() => {
-    if (!changedField) return;
-    const timeout = window.setTimeout(() => setChangedField(null), 800);
-    return () => window.clearTimeout(timeout);
-  }, [changedField]);
+  }, []);
 
   const openCustomerDecision = (id: string, nextArea: Area = "Decisions") => {
     setSelectedId(id);
@@ -331,9 +275,7 @@ export default function Home() {
   };
 
   const openStudio = (decision: Decision) => {
-    setStudioTarget(decision.customer.id === "SIM-001"
-      ? { kind: "simulator", decision }
-      : { kind: "customer", id: decision.customer.id });
+    setStudioTarget({ id: decision.customer.id });
   };
 
   const updateDraftThreshold = (value: number) => {
@@ -378,18 +320,6 @@ export default function Home() {
     window.setTimeout(() => setPolicyNotice(""), 2200);
   };
 
-  const setScenario = (nextScenario: SimulatorScenario) => {
-    setScenarioState(nextScenario);
-    setSimulatorState({ ...SCENARIO_PRESETS[nextScenario] });
-    setChangedField("scenario");
-  };
-
-  const updateSimulatorState = <K extends keyof SimulatorState>(field: K, value: SimulatorState[K]) => {
-    setScenarioState("Manual controls");
-    setSimulatorState((current) => ({ ...current, [field]: value }));
-    setChangedField(field);
-  };
-
   const saveNudgeDraft = (decisionId: string, copy: string) => {
     setCopyOverrides((current) => ({ ...current, [decisionId]: copy }));
   };
@@ -407,6 +337,22 @@ export default function Home() {
     setArea(nextArea);
     setMobileMenuOpen(false);
     setNotificationsOpen(false);
+  };
+
+  const dismissTour = () => {
+    window.localStorage.setItem("firsttrade-signal-tour-complete", "true");
+    setTourOpen(false);
+  };
+
+  const advanceTour = () => {
+    const areas: Area[] = ["Overview", "Decisions", "Policy Studio"];
+    if (tourStep >= areas.length - 1) {
+      dismissTour();
+      return;
+    }
+    const nextStep = tourStep + 1;
+    setTourStep(nextStep);
+    navigate(areas[nextStep]);
   };
 
   const page = area === "Overview"
@@ -450,31 +396,20 @@ export default function Home() {
               reducedMotion={reducedMotion}
             />
           )
-          : area === "Measurement"
-            ? <MeasurementPage decision={selectedDecision} reducedMotion={reducedMotion} />
-            : (
-              <SimulatorPage
-                scenario={scenario}
-                state={simulatorState}
-                decision={simulatorDecision}
-                changedField={changedField}
-                changedScoreActions={changedScoreActions}
-                recommendationNotice={recommendationNotice}
-                calculationOpen={simulatorCalculationOpen}
-                onScenario={setScenario}
-                onChange={updateSimulatorState}
-                onOpenStudio={() => openStudio(simulatorDecision)}
-                onToggleCalculation={() => setSimulatorCalculationOpen((current) => !current)}
-                reducedMotion={reducedMotion}
-              />
-            );
+          : <MeasurementPage decision={selectedDecision} reducedMotion={reducedMotion} />;
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden selection:bg-primary/20">
-      <aside className="hidden lg:flex w-64 border-r border-border bg-card flex-col shrink-0">
+    <div className="app-shell flex h-screen w-full bg-background text-foreground font-sans overflow-hidden selection:bg-primary/20">
+      <div className="ambient-layer" aria-hidden="true">
+        <motion.span className="ambient-orb ambient-orb-one" animate={reducedMotion ? undefined : { y: [0, -26, 0], x: [0, 14, 0], rotate: [0, 8, 0] }} transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }} />
+        <motion.span className="ambient-orb ambient-orb-two" animate={reducedMotion ? undefined : { y: [0, 30, 0], x: [0, -18, 0], rotate: [0, -12, 0] }} transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }} />
+        <motion.span className="ambient-orb ambient-orb-three" animate={reducedMotion ? undefined : { y: [0, -18, 0], scale: [1, 1.08, 1] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} />
+        <span className="ambient-grid" />
+      </div>
+      <aside className="aurora-sidebar hidden lg:flex w-64 border-r border-border bg-card flex-col shrink-0 z-10">
         <div className="p-4 border-b border-border flex items-center gap-3">
-          <div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><Zap size={16} fill="currentColor" /></div>
-          <div><div className="font-bold text-sm text-foreground leading-tight">FirstTrade</div><div className="text-xs font-medium text-muted-foreground">Decision centre</div></div>
+          <div className="brand-mark w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm"><Zap size={16} fill="currentColor" /></div>
+          <div><div className="font-bold text-sm text-foreground leading-tight tracking-tight">FirstTrade</div><div className="text-xs font-medium text-muted-foreground">Decision orbit</div></div>
         </div>
         <div className="p-4 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-background transition-colors">
           <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-xs font-bold text-foreground">PM</div>
@@ -488,7 +423,7 @@ export default function Home() {
               key={label}
               data-testid={`nav-${label.replace(/\s+/g, "-")}`}
               onClick={() => navigate(label)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${area === label ? "bg-background text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
+              className={`nav-orbit-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${area === label ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
             >
               <Icon size={16} className={area === label ? "text-primary" : "text-muted-foreground"} />
               {label}
@@ -502,8 +437,8 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between shrink-0 relative">
+      <main className="app-content flex-1 flex flex-col min-w-0 relative z-10">
+        <header className="topbar-glass h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between shrink-0 relative">
           <div className="flex items-center gap-2 text-sm font-medium min-w-0">
             <button type="button" data-testid="button-mobile-menu" aria-label="Open navigation menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-1.5 -ml-1 text-muted-foreground hover:text-foreground transition-colors">
               <Menu size={18} />
@@ -512,8 +447,11 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3 sm:gap-5">
             <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-muted-foreground bg-background border border-border px-2 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#18794E]" /> All systems synthetic
+              <span className="status-pulse w-1.5 h-1.5 rounded-full bg-[#4DFFD2]" /> All systems synthetic
             </div>
+            <button type="button" data-testid="button-replay-tour" aria-label="Replay signal tour" onClick={() => { setTourStep(0); setTourOpen(true); navigate("Overview"); }} className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors">
+              <Sparkles size={14} /> Guide
+            </button>
             <div className="relative">
               <button type="button" data-testid="button-notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((current) => !current)} className="text-muted-foreground hover:text-foreground transition-colors"><Bell size={18} /></button>
               <AnimatePresence>
@@ -531,7 +469,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 relative">
+        <div className="app-scroll flex-1 overflow-y-auto p-4 sm:p-8 relative">
           <div className="max-w-5xl mx-auto space-y-6 pb-12">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
@@ -552,13 +490,13 @@ export default function Home() {
         {mobileMenuOpen && (
           <>
             <motion.button type="button" aria-label="Close navigation menu" initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reducedMotion ? undefined : { opacity: 0 }} onClick={() => setMobileMenuOpen(false)} className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" />
-            <motion.aside initial={reducedMotion ? false : { x: -280 }} animate={{ x: 0 }} exit={reducedMotion ? undefined : { x: -280 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[86vw] flex-col border-r border-border bg-card shadow-2xl lg:hidden">
+            <motion.aside initial={reducedMotion ? false : { x: -280 }} animate={{ x: 0 }} exit={reducedMotion ? undefined : { x: -280 }} transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }} className="aurora-sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[86vw] flex-col border-r border-border bg-card shadow-2xl lg:hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-3"><div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center"><Zap size={16} fill="currentColor" /></div><div><div className="font-bold text-sm text-foreground">FirstTrade</div><div className="text-xs text-muted-foreground">Decision centre</div></div></div>
                 <button type="button" aria-label="Close navigation menu" onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-muted-foreground hover:text-foreground"><X size={18} /></button>
               </div>
               <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                {nav.map(({ label, icon: Icon }) => <button type="button" key={label} data-testid={`mobile-nav-${label.replace(/\s+/g, "-")}`} onClick={() => navigate(label)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${area === label ? "bg-background text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}><Icon size={16} />{label}{label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.length}</span>}</button>)}
+                {nav.map(({ label, icon: Icon }) => <button type="button" key={label} data-testid={`mobile-nav-${label.replace(/\s+/g, "-")}`} onClick={() => navigate(label)} className={`nav-orbit-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium ${area === label ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}><Icon size={16} />{label}{label === "Decisions" && <span className="ml-auto bg-card border border-border text-foreground font-semibold text-[10px] py-0.5 px-2 rounded-full">{decisions.length}</span>}</button>)}
               </nav>
               <div className="p-4 border-t border-border text-xs font-medium text-muted-foreground space-y-2"><div className="flex items-center gap-2"><CircleAlert size={14} /> Policy v{livePolicy.version}</div><div className="flex items-center gap-2"><UserRound size={14} /> PM workspace</div></div>
             </motion.aside>
@@ -580,6 +518,10 @@ export default function Home() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {tourOpen && <CoachmarkTour step={tourStep} onAdvance={advanceTour} onDismiss={dismissTour} reducedMotion={reducedMotion} />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -598,27 +540,48 @@ function OverviewPage({
   const priority = decisions.filter((decision) => decision.selectedAction !== "No recommendation").slice(0, 3);
   return (
     <>
-      <SectionTitle title="FirstTrade Decision Centre" copy="Turn account activation status and customer behaviour into the most relevant next action." />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section className="orbital-hero overflow-hidden">
+        <div className="relative z-10 max-w-2xl">
+          <div className="eyebrow-chip mb-5"><span className="live-dot" /> LIVE ACTIVATION INTELLIGENCE</div>
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-[-0.05em] text-foreground leading-[0.98]">Make every <span className="hero-gradient-text">next move</span> feel obvious.</h1>
+          <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed text-muted-foreground">FirstTrade turns activation signals into a single, customer-safe action—so momentum never quietly disappears from the journey.</p>
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <Button primary onClick={onOpenQueue} testId="button-open-decision-queue-hero" className="hero-primary-button"><Zap size={15} fill="currentColor" /> Enter decision queue <ArrowRight size={15} /></Button>
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground px-3 py-2 rounded-full border border-border bg-background/50"><span className="status-pulse w-2 h-2 rounded-full bg-[#4DFFD2]" /> 98.4% signal coverage</div>
+          </div>
+        </div>
+        <div className="hero-orbit-scene" aria-hidden="true">
+          <motion.div className="orbit-ring orbit-ring-one" animate={reducedMotion ? undefined : { rotate: 360 }} transition={{ duration: 30, repeat: Infinity, ease: "linear" }} />
+          <motion.div className="orbit-ring orbit-ring-two" animate={reducedMotion ? undefined : { rotate: -360 }} transition={{ duration: 22, repeat: Infinity, ease: "linear" }} />
+          <motion.div className="orbit-node orbit-node-cyan" animate={reducedMotion ? undefined : { y: [0, -10, 0], x: [0, 8, 0] }} transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}><Target size={18} /></motion.div>
+          <motion.div className="orbit-node orbit-node-violet" animate={reducedMotion ? undefined : { y: [0, 10, 0], x: [0, -6, 0] }} transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}><Sparkles size={18} /></motion.div>
+          <motion.div className="signal-core" animate={reducedMotion ? undefined : { scale: [1, 1.1, 1], boxShadow: ["0 0 0 0 rgba(105,234,255,0.25)", "0 0 0 18px rgba(105,234,255,0)", "0 0 0 0 rgba(105,234,255,0)"] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}><Zap size={26} fill="currentColor" /></motion.div>
+          <div className="orbit-readout"><span>PRIMARY SIGNAL</span><b>Funding intent</b><em>+ 0.80</em></div>
+        </div>
+      </section>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
         {[
-          ["Customers requiring a next action", 2667, "metric-1"],
-          ["A2T achieved through pre-order or MF order", 1184, "metric-2"],
-          ["Cohort defaults overridden by FirstTrade", 318, "metric-3"],
+          ["Customers ready for a next action", 2667, "metric-1", "cyan"],
+          ["A2T successes this journey", 1184, "metric-2", "violet"],
+          ["Better-than-default decisions", 318, "metric-3", "lime"],
         ].map(([label, value, testId]) => (
           <motion.div
             key={label}
             initial={reducedMotion ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
-            className="bg-card border border-border p-4 rounded-lg shadow-sm"
+            whileHover={reducedMotion ? undefined : { y: -5, scale: 1.01 }}
+            className={`metric-card metric-card--${testId === "metric-1" ? "cyan" : testId === "metric-2" ? "violet" : "lime"} border border-border p-5 rounded-2xl shadow-sm`}
           >
-            <div className="text-sm text-muted-foreground mb-1">{label}</div>
-            <div className="text-2xl font-bold text-foreground" data-testid={testId}><AnimatedMetric value={value as number} reducedMotion={reducedMotion} /></div>
+            <div className="metric-card__shine" />
+            <div className="relative z-10 text-sm text-muted-foreground mb-2">{label}</div>
+            <div className="relative z-10 text-3xl font-bold tracking-tight text-foreground" data-testid={testId}><AnimatedMetric value={value as number} reducedMotion={reducedMotion} /></div>
+            <div className="relative z-10 mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><span className="metric-trend">↗</span> {testId === "metric-1" ? "12% since last week" : testId === "metric-2" ? "14.8% conversion" : "trusted policy overrides"}</div>
           </motion.div>
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
+      <div className="hud-panel bg-card border border-border rounded-2xl shadow-sm mt-6">
         <div className="p-4 border-b border-border flex justify-between items-end">
           <div>
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">ACTIVATION FLOW</div>
@@ -656,7 +619,7 @@ function OverviewPage({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-lg shadow-sm mt-6">
+      <div className="hud-panel bg-card border border-border rounded-2xl shadow-sm mt-6">
         <div className="p-4 border-b border-border flex justify-between items-center bg-background">
           <div>
            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">QUEUE · {decisions.length} DECISIONS</div>
@@ -1171,6 +1134,86 @@ function MeasurementPage({ decision, reducedMotion }: { decision: Decision; redu
         </div>
       </div>
     </div>
+  );
+}
+
+function CoachmarkTour({
+  step,
+  onAdvance,
+  onDismiss,
+  reducedMotion,
+}: {
+  step: number;
+  onAdvance: () => void;
+  onDismiss: () => void;
+  reducedMotion: boolean;
+}) {
+  const steps = [
+    {
+      eyebrow: "WELCOME TO DECISION ORBIT",
+      title: "Your activation system has a pulse.",
+      copy: "Start here to see the live signal moving from account activation to a customer-safe next step.",
+      label: "Overview signal map",
+      action: "Show the decision queue",
+      icon: Zap,
+    },
+    {
+      eyebrow: "FOLLOW THE SIGNAL",
+      title: "Every decision comes with a reason.",
+      copy: "The queue turns customer context, score evidence, and safety rules into one useful action—not another dashboard to decode.",
+      label: "Decision queue",
+      action: "Show policy impact",
+      icon: Target,
+    },
+    {
+      eyebrow: "MAKE CHANGE SAFELY",
+      title: "Preview the impact before you publish.",
+      copy: "Policy Studio lets you tune the decision engine locally and see which recommendations would change before anything goes live.",
+      label: "Policy Studio",
+      action: "Start exploring",
+      icon: Settings2,
+    },
+  ];
+  const active = steps[step] ?? steps[0];
+  const Icon = active.icon;
+
+  return (
+    <motion.div
+      initial={reducedMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={reducedMotion ? undefined : { opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center sm:p-8"
+    >
+      <button type="button" aria-label="Skip product tour" onClick={onDismiss} className="absolute inset-0 cursor-default bg-[#020616]/55 backdrop-blur-[3px]" />
+      <motion.section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="signal-tour-title"
+        initial={reducedMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={reducedMotion ? undefined : { opacity: 0, y: 16, scale: 0.98 }}
+        transition={{ duration: reducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
+        className="coachmark-card relative w-full max-w-md overflow-hidden rounded-[1.5rem] border border-border p-6 sm:p-7"
+      >
+        <motion.div className="coachmark-glow" animate={reducedMotion ? undefined : { x: [0, 40, 0], y: [0, -16, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} />
+        <div className="relative z-10 flex items-start justify-between gap-4">
+          <div className="coachmark-icon"><Icon size={21} /></div>
+          <button type="button" onClick={onDismiss} className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">Skip tour</button>
+        </div>
+        <div className="relative z-10 mt-7">
+          <div className="text-[11px] font-bold tracking-[0.16em] text-primary">{active.eyebrow}</div>
+          <h2 id="signal-tour-title" className="mt-3 text-3xl font-bold leading-[1.02] tracking-[-0.04em] text-foreground">{active.title}</h2>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{active.copy}</p>
+          <div className="tour-location mt-5"><Sparkles size={14} /> Now exploring: {active.label}</div>
+        </div>
+        <div className="relative z-10 mt-7 flex items-center justify-between gap-4">
+          <div className="flex gap-1.5" aria-label={`Step ${step + 1} of 3`}>
+            {steps.map((tourStep, index) => <span key={tourStep.label} className={`h-1.5 rounded-full transition-all ${index === step ? "w-8 bg-primary" : "w-1.5 bg-border"}`} />)}
+          </div>
+          <Button primary onClick={onAdvance} testId="button-advance-signal-tour" className="coachmark-cta">{active.action} <ArrowRight size={15} /></Button>
+        </div>
+      </motion.section>
+    </motion.div>
   );
 }
 
