@@ -1,0 +1,298 @@
+Paste this into Replit Agent. It is the full build brief.
+
+```text
+Enhance the existing FirstTrade prototype. Do not rebuild from scratch. Preserve the existing synthetic data, simulator, and deterministic decision logic where possible.
+
+PRODUCT:
+FirstTrade is a configurable activation-orchestration control plane for Indian stock brokers. 5paisa is the demonstration broker, but the product must feel sellable to any broker.
+
+PRIMARY USER:
+A Product Manager who owns the guest-to-trader order-flow journey and is accountable for Activation-to-Trade (A2T) conversion targets.
+
+CORE PRODUCT PROMISE:
+Cohorts tell a PM where a customer is in account activation. FirstTrade tells the PM what the customer should do next, why, how it should be delivered, and how to measure impact.
+
+IMPORTANT:
+- This is an internal PM tool, not a customer-facing broker app.
+- Do not provide stock recommendations, trading advice, return predictions, or personalised security recommendations.
+- Use only a customer’s own saved, searched, or selected instrument as a deep-link context.
+- External KRA, UCC, MF, and exchange approval states are context, never negative behaviour.
+- No real notifications, WhatsApp messages, orders, integrations, or customer data. Everything is simulated with synthetic records.
+
+INFORMATION ARCHITECTURE:
+Create six navigation areas:
+1. Overview
+2. Cohorts
+3. Decisions
+4. Policy Studio
+5. Measurement
+6. Simulator
+
+1. OVERVIEW — “FirstTrade Decision Centre”
+Purpose: Help the PM identify the activation gap and highest-priority interventions.
+
+Show:
+- Title: FirstTrade Decision Centre
+- Subtitle: “Turn account activation status and customer behaviour into the most relevant next action.”
+- Three metrics only:
+  - Customers requiring a next action
+  - A2T achieved through pre-order or MF order
+  - Cohort defaults overridden by FirstTrade
+- A compact activation funnel:
+  Post e-sign → KRA → UCC Mapping → MF Account → Exchange Approval → A2T
+- A Priority Decisions table:
+  Customer | Cohort | Recommended next action | Why | Channel | Policy version | View decision
+- No fake uplift numbers, fake charts, or fabricated business results.
+
+2. COHORTS
+Purpose: Show that account state explains what is possible, but not what customers should do next.
+
+Show a clean horizontal journey with four cohorts:
+- KRA Stage
+- UCC Mapping Stage
+- MF Account Stage
+- Exchange Trading Approval Stage
+
+For every cohort, display:
+- What is pending externally
+- What the customer can still do
+- Existing default cohort action
+- Customer count
+- Top FirstTrade-selected actions
+- “View customers” interaction
+
+Include a clear exception state:
+- KYC/KRA rejected = Recovery only
+- Only action: Complete Re-KYC / Re-KRA
+- No score, no other recommendation
+
+3. DECISIONS
+Purpose: Let the PM inspect and trust one selected action.
+
+Use a master-detail layout:
+- Left: filterable, sortable decision queue
+- Right: decision detail panel
+
+Decision Detail must show:
+- Customer name, synthetic ID, activation cohort, account timeline
+- Headline: “Recommended next action: [Action]”
+- Short “Why this action?” explanation in plain English
+- Cohort default action
+- Why default was retained or replaced
+- Action Fit Score as supporting evidence only
+- Five parent signal categories:
+  1. Order-flow intent
+  2. Watchlist / research
+  3. MF intent
+  4. F&O / Commodity intent
+  5. Funding / pre-order readiness
+- Expandable “View score calculation”
+- Customer-safe in-app nudge preview
+- Selected deep-link destination
+- Channel and timing plan
+- Suppression rules
+- “Open Nudge Studio” button
+
+4. ACTION FIT SCORE
+Implement an action-specific 0–100 Action Fit Score. It is not a probability and is never shown to customers.
+
+Formula:
+Action Fit Score = 20 eligible-user base points + configured action-specific signal weights.
+
+Only award base points when:
+- Post e-sign is complete
+- Customer is not KYC/KRA rejected
+- Customer has not already achieved A2T
+
+Score normalisation:
+- Order-flow intent:
+  none 0; order form opened 0.3; instrument selected 0.7; order types explored or later-session revisit 1.0
+- Watchlist / research:
+  none 0; watchlist created 0.6; instrument added 0.8; watchlist/instrument revisited 1.0
+- MF intent:
+  none 0; MF visited in two sessions 0.4; scheme detail opened 0.7; SIP calculator used 1.0
+- F&O / Commodity intent:
+  none 0; dashboard viewed 0.3; eligibility checked 0.7; activation started 1.0
+- Funding / pre-order readiness:
+  none 0; Add Funds started 0.3; funds added 0.65; pre-order started 0.8; pre-order review reached 1.0
+
+Use editable default action weights. Each candidate action must have a total maximum weight of 80:
+
+| Action | Order | Watchlist | MF | Segment | Funding / Pre-order |
+| Add Funds | 25 | 25 | 10 | 10 | 10 |
+| Create Pre-order | 25 | 20 | 0 | 0 | 35 |
+| Start MF Investing | 5 | 5 | 45 | 0 | 25 |
+| Activate Segment | 10 | 10 | 0 | 50 | 10 |
+| Take First Trade | 25 | 20 | 0 | 0 | 35 |
+
+Selection logic:
+1. KYC/KRA rejected: return only Complete Re-KYC / Re-KRA.
+2. Pre-order submitted or MF order submitted: mark A2T achieved, remove from queue, stop all nudges.
+3. Remove already completed actions from candidates.
+4. If a customer started an incomplete flow, prioritise “Resume” that same flow.
+5. Calculate Action Fit for remaining eligible actions.
+6. If top score is 60 or more, select it.
+7. If no score reaches 60, retain the incomplete cohort default.
+8. If two scores are within 5 points, retain the cohort default.
+9. When exchange is approved, remove Create Pre-order and make Take First Trade eligible.
+
+5. NUDGE STUDIO
+Purpose: Turn a decision into a simulated, PM-approved journey.
+
+Open it from Decision Detail. Show:
+- Selected action
+- Action rationale
+- Deep-link destination
+- Three channel previews:
+  1. In-app card — primary
+  2. Push notification — fallback
+  3. WhatsApp — fallback preview only
+- AI-generated compliant copy variants for each channel
+- PM can choose a variant and edit it manually
+- Show the original AI draft and PM-approved final copy
+- Delivery logic:
+  - In-app: immediately when customer is active
+  - Push: 30 minutes after exit if action remains incomplete, permission is available, and fewer than two pushes were ignored in seven days
+  - WhatsApp: 24 hours later if still incomplete and consent eligible; preview only in prototype
+- Suppress all messages once target action is complete.
+- Button: “Approve workflow”
+- After approval, move workflow to Draft Published state only in simulation. Do not send anything real.
+
+Safe example copy:
+- “Your watchlist is ready. Add funds so you are ready when activation completes.”
+- “You have funds ready. Continue setting up your pre-order for the instrument you selected.”
+- “Continue your SIP calculation and choose an amount that works for you.”
+- “Continue the segment activation you started.”
+
+Do not use language such as “Buy this stock,” “best investment,” “returns,” “urgent market opportunity,” or “recommended security.”
+
+6. POLICY STUDIO
+Purpose: Give the Product Manager controlled configuration.
+
+The PM can:
+- Edit five signal weights for every action
+- Edit selection threshold, default 60
+- Edit Push and WhatsApp timing
+- Edit suppression rule: max ignored pushes, default 2 in 7 days
+- View the expected impact on synthetic customers before publishing
+
+Use safe workflow versioning:
+Draft → Preview affected customers → Publish simulated version
+
+Show:
+- Current live simulated policy: Version 1.0
+- Draft policy changes
+- Before / after list of customers whose recommended action changes
+- “Publish simulated version” button
+- Version history with timestamp and concise change summary
+
+Do not build broker-specific cohort mapping, compliance approval workflows, real traffic allocation, or production publishing in this phase.
+
+7. MEASUREMENT
+Purpose: Make FirstTrade ready for a later A/B test without inventing outcomes.
+
+Show:
+- Hypothesis:
+  “FirstTrade-selected actions will improve A2T success versus the existing cohort journey.”
+- Control:
+  Existing static cohort journey with existing completed-action suppression
+- Treatment:
+  Existing cohort journey plus FirstTrade-selected action
+- Primary metric:
+  A2T success within seven days of e-sign
+- Success events:
+  Pre-order submitted, MF order submitted, or first trade placed
+- Guardrails:
+  repeated completed-action prompts, push dismissals/opt-outs, recovery completion
+- Display the event trail that will be recorded:
+  policyVersion → cohort → decision → channel → CTA click → action completed → A2T achieved
+- Show “Experiment ready” rather than any fake uplift results.
+
+8. SIMULATOR
+Purpose: Let the PM prove decision logic during the demo.
+
+Use a two-column layout:
+- Left: editable account state and five signal categories
+- Right: live Action Fit comparison and recommendation
+
+Allow changes to:
+- KRA status
+- UCC status
+- MF account status
+- Exchange approval
+- Funds state
+- Order-flow intent
+- Watchlist / research intent
+- MF intent
+- Segment intent
+- Pre-order readiness
+- Current app session
+- Push response / permission
+
+Immediately recalculate:
+- eligible actions
+- unavailable actions
+- candidate scores
+- selected recommendation
+- nudge copy and channel plan
+
+Required demo scenarios:
+1. UCC pending + watchlist/research + no funds → Add Funds
+2. UCC pending + funds added + user-selected instrument in order flow → Create Pre-order
+3. MF active + SIP calculator used → Start / Resume MF Investing
+4. Segment activation started → Resume Segment Activation
+5. KYC/KRA rejected → Recovery-only Re-KYC/Re-KRA
+6. Pre-order submitted or MF order submitted → A2T achieved, no recommendation
+7. Exchange approved with no A2T achieved → Take First Trade
+
+AI ROLE:
+AI must not choose eligibility, score, or investment action.
+AI must:
+- Explain why FirstTrade selected an action
+- Explain why the cohort default was replaced or retained
+- Generate three safe channel-specific copy variants from structured decision facts
+- Allow PM editing before simulated publishing
+If a live AI integration is unavailable, use a clearly structured local mock generation function so the prototype remains fully functional.
+
+VISUAL DESIGN:
+Create a light, premium enterprise-fintech control centre.
+
+- Canvas #F7F8FA
+- Surface #FFFFFF
+- Text #10233D
+- Secondary text #627085
+- Border #E3E8EF
+- Primary blue #1769E0
+- Success green #18794E
+- Recovery red #B42318
+- Use Inter or Manrope.
+- 14px minimum body text.
+- Calm, data-dense, credible, desktop-first.
+- Use Linear-style hierarchy and selection patterns; Ramp-style operational clarity.
+- No purple, gradients, neon, glassmorphism, floating orbs, emojis, oversized hero copy, tiny all-caps labels, excessive pills, or generic card grids.
+- Maximum 8px radius. Use borders only where they clarify grouping.
+
+PURPOSEFUL MOTION:
+Use Framer Motion or equivalent. Respect reduced-motion preference.
+
+- Active nav indicator slides between sections.
+- Cohort timeline draws left to right once in 450ms.
+- Stage cards reveal with a 40ms stagger.
+- Customer selection: detail panel slides/fades from right in 220ms.
+- Simulator changes: changed signal highlights; old recommendation fades down; new recommendation fades in over 200ms.
+- Changed score rows receive a pale-blue temporary highlight.
+- Signal bars fill once when score calculation is expanded.
+- Nudge previews cross-fade when action changes; Push and WhatsApp previews reveal with a short stagger.
+- Policy preview animates before/after customer recommendation changes.
+- A2T achieved uses a restrained green check-draw transition, never confetti.
+- No looping, bouncing, floating, spinning, or animated background effects.
+
+BUILD PRIORITY:
+1. Cohorts, Decisions, Action Fit engine, and Simulator
+2. Nudge Studio with AI-copy mock variants and manual editing
+3. Policy Studio with Draft → Preview → Publish simulated version
+4. Measurement screen
+5. Motion and final polish
+
+After building, verify every required demo scenario in Simulator and ensure completed actions, recovery states, and A2T states never produce an invalid recommendation.
+```
